@@ -1,0 +1,5 @@
+LIBRARY Codex
+EXPORTS
+    GetPluginInfo
+    PluginInit
+    PluginShutdown

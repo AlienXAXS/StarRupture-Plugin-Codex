@@ -1,0 +1,142 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+
+  <!-- =========================================================
+       Filter (virtual folder) definitions
+       ========================================================= -->
+  <ItemGroup>
+
+    <!-- Plugin bootstrap & entry points -->
+    <Filter Include="Plugin Core">
+      <UniqueIdentifier>{a1b2c3d4-0001-0001-0001-000000000001}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Plugin Core\Config">
+      <UniqueIdentifier>{a1b2c3d4-0001-0001-0001-000000000002}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Plugin Core\Helpers">
+      <UniqueIdentifier>{a1b2c3d4-0001-0001-0001-000000000003}</UniqueIdentifier>
+    </Filter>
+
+    <!-- Icon loading (item/recipe icons pre-loaded via asset registry scan) -->
+    <Filter Include="Icons">
+      <UniqueIdentifier>{a1b2c3d4-0001-0001-0001-000000000004}</UniqueIdentifier>
+    </Filter>
+
+    <!-- Recipe database (asset registry scan + building association) -->
+    <Filter Include="Recipes">
+      <UniqueIdentifier>{a1b2c3d4-0001-0001-0001-000000000005}</UniqueIdentifier>
+    </Filter>
+
+    <!-- Codex search box + recipe detail UI -->
+    <Filter Include="UI">
+      <UniqueIdentifier>{a1b2c3d4-0001-0001-0001-000000000006}</UniqueIdentifier>
+    </Filter>
+
+    <!-- Modloader SDK header (read-only, from $(PluginSDKInclude)) -->
+    <Filter Include="SDK">
+      <UniqueIdentifier>{a1b2c3d4-0002-0002-0002-000000000001}</UniqueIdentifier>
+    </Filter>
+
+  </ItemGroup>
+
+  <!-- =========================================================
+       Header files
+       ========================================================= -->
+  <ItemGroup>
+
+    <!-- Plugin Core -->
+    <ClInclude Include="Plugin Core\plugin.h">
+      <Filter>Plugin Core</Filter>
+    </ClInclude>
+
+    <!-- Plugin Core\Config -->
+    <ClInclude Include="Plugin Core\Config\plugin_config.h">
+      <Filter>Plugin Core\Config</Filter>
+    </ClInclude>
+
+    <!-- Plugin Core\Helpers -->
+    <ClInclude Include="Plugin Core\Helpers\plugin_helpers.h">
+      <Filter>Plugin Core\Helpers</Filter>
+    </ClInclude>
+
+    <!-- Icons -->
+    <ClInclude Include="Icons\codex_icons.h">
+      <Filter>Icons</Filter>
+    </ClInclude>
+
+    <!-- Recipes -->
+    <ClInclude Include="Recipes\codex_recipes.h">
+      <Filter>Recipes</Filter>
+    </ClInclude>
+
+    <!-- UI -->
+    <ClInclude Include="UI\codex_ui.h">
+      <Filter>UI</Filter>
+    </ClInclude>
+
+    <!-- SDK (header resolved via $(PluginSDKInclude) in Shared.props) -->
+    <ClInclude Include="$(PluginSDKInclude)\plugin_interface.h">
+      <Filter>SDK</Filter>
+    </ClInclude>
+
+  </ItemGroup>
+
+  <!-- =========================================================
+       Source files
+       ========================================================= -->
+  <ItemGroup>
+
+    <!-- Plugin Core -->
+    <ClCompile Include="Plugin Core\dllmain.cpp">
+      <Filter>Plugin Core</Filter>
+    </ClCompile>
+    <ClCompile Include="Plugin Core\plugin.cpp">
+      <Filter>Plugin Core</Filter>
+    </ClCompile>
+
+    <!-- Plugin Core\Config -->
+    <ClCompile Include="Plugin Core\Config\plugin_config.cpp">
+      <Filter>Plugin Core\Config</Filter>
+    </ClCompile>
+
+    <!-- Icons -->
+    <ClCompile Include="Icons\codex_icons.cpp">
+      <Filter>Icons</Filter>
+    </ClCompile>
+
+    <!-- Recipes -->
+    <ClCompile Include="Recipes\codex_recipes.cpp">
+      <Filter>Recipes</Filter>
+    </ClCompile>
+
+    <!-- UI -->
+    <ClCompile Include="UI\codex_ui.cpp">
+      <Filter>UI</Filter>
+    </ClCompile>
+
+    <!-- SDK source files (hidden, auto-included via props) -->
+    <ClCompile Include="$(StarRuptureSDKSourceDir)Basic.cpp">
+      <Filter>SDK</Filter>
+    </ClCompile>
+    <ClCompile Include="$(StarRuptureSDKSourceDir)CoreUObject_functions.cpp">
+      <Filter>SDK</Filter>
+    </ClCompile>
+    <ClCompile Include="$(StarRuptureSDKSourceDir)Engine_functions.cpp">
+      <Filter>SDK</Filter>
+    </ClCompile>
+    <ClCompile Include="$(StarRuptureSDKSourceDir)AuCrafting_functions.cpp">
+      <Filter>SDK</Filter>
+    </ClCompile>
+
+  </ItemGroup>
+
+  <!-- =========================================================
+       Module definition
+       ========================================================= -->
+  <ItemGroup>
+    <None Include="Plugin Core\Codex.def">
+      <Filter>Plugin Core</Filter>
+    </None>
+  </ItemGroup>
+
+</Project>
