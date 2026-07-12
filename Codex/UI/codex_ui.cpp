@@ -243,6 +243,10 @@ namespace CodexUI
 				snprintf(sub, sizeof(sub), "x%d  (%.1f/min)", item.count, ratePerMinute);
 			else
 				snprintf(sub, sizeof(sub), "x%d", item.count);
+
+			// Pull the sub-line up closer to the name; the default item
+			// spacing leaves it too low, bleeding past the row's bottom edge.
+			imgui->SetCursorPosY(imgui->GetCursorPosY() - 4.0f);
 			imgui->TextDisabled(sub);
 			imgui->EndGroup();
 
@@ -443,12 +447,20 @@ namespace CodexUI
 			}
 		}
 
+		// Approximate height of the search box with no results/calc output
+		// shown - used to anchor the window's top edge at the same place it
+		// would sit if vertically centered while collapsed. The window is
+		// then pinned there by its top-left corner (pivot_y = 0), so any
+		// growth from results or a calculator answer expands downward only,
+		// instead of the box itself drifting as height changes.
+		constexpr float kSearchBoxCollapsedHeight = 60.0f;
+
 		void RenderSearchWidget(IModLoaderImGui* imgui)
 		{
 			float dispW = 1920.0f, dispH = 1080.0f;
 			imgui->GetDisplaySize(&dispW, &dispH);
 			g_searchHints.pos_x = dispW * 0.5f;
-			g_searchHints.pos_y = dispH * 0.5f;
+			g_searchHints.pos_y = dispH * 0.5f - kSearchBoxCollapsedHeight * 0.5f;
 
 			if (g_justOpenedSearch)
 			{
@@ -618,9 +630,9 @@ namespace CodexUI
 		g_searchHints.width  = 440.0f;
 		g_searchHints.height = 0.0f;
 		g_searchHints.pos_x  = 960.0f;
-		g_searchHints.pos_y  = 540.0f;
+		g_searchHints.pos_y  = 540.0f - kSearchBoxCollapsedHeight * 0.5f;
 		g_searchHints.pivot_x = 0.5f;
-		g_searchHints.pivot_y = 0.5f;
+		g_searchHints.pivot_y = 0.0f; // Top-anchored so growth expands downward, not from center
 		g_searchHints.size_cond = 0; // Always
 		g_searchHints.pos_cond  = 0; // Always - recentres every frame via GetDisplaySize
 		g_searchHints.extra_window_flags = PluginWindowFlags_NoTitleBar | PluginWindowFlags_NoResize |
@@ -641,7 +653,7 @@ namespace CodexUI
 		g_detailHints.pivot_y = 0.5f;
 		g_detailHints.size_cond = 1; // FirstUseEver - user can resize afterwards
 		g_detailHints.pos_cond  = 1; // FirstUseEver - user can move afterwards
-		g_detailHints.extra_window_flags = PluginWindowFlags_NoSavedSettings;
+		g_detailHints.extra_window_flags = PluginWindowFlags_NoSavedSettings | PluginWindowFlags_NoResize;
 
 		g_detailDesc.name        = "Codex";
 		g_detailDesc.renderFn    = &RenderDetailWidget;
