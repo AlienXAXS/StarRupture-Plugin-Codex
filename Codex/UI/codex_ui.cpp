@@ -21,12 +21,11 @@ namespace CodexUI
 		IPluginSelf* g_self = nullptr;
 
 		WidgetHandle g_searchWidget = nullptr;
-		WidgetHandle g_detailWidget = nullptr;
+		PanelHandle  g_detailPanel = nullptr;
 
 		PluginWindowHints g_searchHints{};
-		PluginWindowHints g_detailHints{};
 		PluginWidgetDesc  g_searchDesc{};
-		PluginWidgetDesc  g_detailDesc{};
+		PluginPanelDesc   g_detailDesc{};
 
 		void* g_inputCaptureToken = nullptr;
 		bool  g_escapeRegistered = false;
@@ -65,6 +64,7 @@ namespace CodexUI
 		void OnSearchKeyPressed(EModKey key, EModKeyEvent event);
 		void CloseSearch();
 		void CloseDetail();
+		void OnDetailPanelClosed(PanelHandle handle);
 
 		std::string ToLower(const std::string& s)
 		{
@@ -162,24 +162,39 @@ namespace CodexUI
 			if (!g_detailVisible)
 			{
 				g_detailVisible = true;
-				if (g_self && g_self->hooks->UI && g_detailWidget)
-					g_self->hooks->UI->SetWidgetVisible(g_detailWidget, true);
+				if (g_self && g_self->hooks->UI && g_detailPanel)
+					g_self->hooks->UI->SetPanelOpen(g_detailPanel);
 				AcquireEscape();
 				AcquireCapture();
 			}
 		}
 
+		// Requests the host close the panel. This runs the shared cleanup
+		// via OnDetailPanelClosed (fired synchronously by SetPanelClose),
+		// the same path taken when the user clicks the window's own X
+		// button - there is only one place that resets our state.
 		void CloseDetail()
 		{
 			if (!g_detailVisible)
 				return;
 
+			if (g_self && g_self->hooks->UI && g_detailPanel)
+				g_self->hooks->UI->SetPanelClose(g_detailPanel);
+			else
+				OnDetailPanelClosed(g_detailPanel);
+		}
+
+		// Fired by the host whenever the panel closes, whether from our own
+		// CloseDetail() (via SetPanelClose) or the user clicking the
+		// window's titlebar X directly.
+		void OnDetailPanelClosed(PanelHandle handle)
+		{
+			if (handle != g_detailPanel || !g_detailVisible)
+				return;
+
 			g_detailVisible = false;
 			g_selectedNativeRecipe = nullptr;
 			g_consumersItemName.clear();
-
-			if (g_self && g_self->hooks->UI && g_detailWidget)
-				g_self->hooks->UI->SetWidgetVisible(g_detailWidget, false);
 
 			ReleaseEscapeIfIdle();
 			ReleaseCaptureIfIdle();
@@ -455,12 +470,25 @@ namespace CodexUI
 		// instead of the box itself drifting as height changes.
 		constexpr float kSearchBoxCollapsedHeight = 60.0f;
 
+		// The search box is intentionally non-resizable (it auto-sizes to
+		// its content every frame), so at large ImGui text-scale settings
+		// its fixed 440px width would clip the input text / result rows.
+		// Instead, scale the width (and the collapsed-height estimate used
+		// to centre it) against the user's current font size, relative to
+		// ImGui's default 13px font.
+		constexpr float kBaselineFontSize = 13.0f;
+		constexpr float kSearchBoxBaseWidth = 440.0f;
+
 		void RenderSearchWidget(IModLoaderImGui* imgui)
 		{
+			const float fontScale = (std::max)(1.0f, imgui->GetFontSize() / kBaselineFontSize);
+			const float collapsedHeight = kSearchBoxCollapsedHeight * fontScale;
+			g_searchHints.width = kSearchBoxBaseWidth * fontScale;
+
 			float dispW = 1920.0f, dispH = 1080.0f;
 			imgui->GetDisplaySize(&dispW, &dispH);
 			g_searchHints.pos_x = dispW * 0.5f;
-			g_searchHints.pos_y = dispH * 0.5f - kSearchBoxCollapsedHeight * 0.5f;
+			g_searchHints.pos_y = dispH * 0.5f - collapsedHeight * 0.5f;
 
 			if (g_justOpenedSearch)
 			{
@@ -645,22 +673,15 @@ namespace CodexUI
 		if (g_searchWidget)
 			self->hooks->UI->SetWidgetVisible(g_searchWidget, false);
 
-		g_detailHints.width  = 640.0f;
-		g_detailHints.height = 520.0f;
-		g_detailHints.pos_x  = 960.0f;
-		g_detailHints.pos_y  = 540.0f;
-		g_detailHints.pivot_x = 0.5f;
-		g_detailHints.pivot_y = 0.5f;
-		g_detailHints.size_cond = 1; // FirstUseEver - user can resize afterwards
-		g_detailHints.pos_cond  = 1; // FirstUseEver - user can move afterwards
-		g_detailHints.extra_window_flags = PluginWindowFlags_NoSavedSettings | PluginWindowFlags_NoResize;
-
-		g_detailDesc.name        = "Codex";
+		// Registered as a Panel (not a Widget) so it gets the same
+		// freely-resizable/movable window as every other plugin's info
+		// window (BetterCheats, ProductionViewer) - Widgets are meant for
+		// pinned, non-resizable overlays like the search box above.
+		g_detailDesc.buttonLabel = "Codex";
+		g_detailDesc.windowTitle = "Codex";
 		g_detailDesc.renderFn    = &RenderDetailWidget;
-		g_detailDesc.windowHints = &g_detailHints;
-		g_detailWidget = self->hooks->UI->RegisterWidget(&g_detailDesc);
-		if (g_detailWidget)
-			self->hooks->UI->SetWidgetVisible(g_detailWidget, false);
+		g_detailPanel = self->hooks->UI->RegisterPanel(&g_detailDesc);
+		self->hooks->UI->RegisterOnPanelWindowClosed(&OnDetailPanelClosed);
 
 		if (self->hooks->Input)
 		{
@@ -694,10 +715,12 @@ namespace CodexUI
 			self->hooks->UI->UnregisterWidget(g_searchWidget);
 			g_searchWidget = nullptr;
 		}
-		if (g_detailWidget)
+
+		self->hooks->UI->UnregisterOnPanelWindowClosed(&OnDetailPanelClosed);
+		if (g_detailPanel)
 		{
-			self->hooks->UI->UnregisterWidget(g_detailWidget);
-			g_detailWidget = nullptr;
+			self->hooks->UI->UnregisterPanel(g_detailPanel);
+			g_detailPanel = nullptr;
 		}
 
 		g_self = nullptr;
