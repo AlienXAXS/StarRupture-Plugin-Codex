@@ -8,7 +8,9 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <string>
 #include <vector>
 
@@ -319,6 +321,128 @@ namespace CodexUI
 			imgui->EndPopup();
 		}
 
+		// Lets the search box double as a calculator (à la Satisfactory's
+		// search bar): typing "12 * 250" shows "= 3000" beneath the box
+		// instead of running a recipe search.
+		namespace Calculator
+		{
+			struct Parser
+			{
+				const char* p;
+				bool ok = true;
+
+				void SkipSpace() { while (*p == ' ' || *p == '\t') ++p; }
+
+				double ParseExpr()
+				{
+					double lhs = ParseTerm();
+					for (;;)
+					{
+						SkipSpace();
+						if (*p == '+') { ++p; lhs += ParseTerm(); }
+						else if (*p == '-') { ++p; lhs -= ParseTerm(); }
+						else break;
+					}
+					return lhs;
+				}
+
+				double ParseTerm()
+				{
+					double lhs = ParseUnary();
+					for (;;)
+					{
+						SkipSpace();
+						if (*p == '*') { ++p; lhs *= ParseUnary(); }
+						else if (*p == '/')
+						{
+							++p;
+							double rhs = ParseUnary();
+							if (!ok || rhs == 0.0) { ok = false; return 0.0; }
+							lhs /= rhs;
+						}
+						else break;
+					}
+					return lhs;
+				}
+
+				double ParseUnary()
+				{
+					SkipSpace();
+					if (*p == '-') { ++p; return -ParseUnary(); }
+					if (*p == '+') { ++p; return ParseUnary(); }
+					return ParseAtom();
+				}
+
+				double ParseAtom()
+				{
+					SkipSpace();
+					if (*p == '(')
+					{
+						++p;
+						double v = ParseExpr();
+						SkipSpace();
+						if (*p != ')') { ok = false; return 0.0; }
+						++p;
+						return v;
+					}
+
+					const char* start = p;
+					while ((*p >= '0' && *p <= '9') || *p == '.')
+						++p;
+					if (p == start) { ok = false; return 0.0; }
+
+					return std::strtod(start, nullptr);
+				}
+			};
+
+			// Cheap pre-check before running the parser: only digits,
+			// arithmetic operators, parens, '.' and whitespace are allowed,
+			// and there must be at least one digit - otherwise a plain
+			// recipe search term like "Iron Plate" would never reach here,
+			// but this keeps the rejection explicit and free of parser cost.
+			bool TryEvaluate(const std::string& expr, double& outResult)
+			{
+				bool hasDigit = false;
+				for (char c : expr)
+				{
+					if (c >= '0' && c <= '9') { hasDigit = true; continue; }
+					if (c == '+' || c == '-' || c == '*' || c == '/' ||
+						c == '(' || c == ')' || c == '.' || c == ' ' || c == '\t')
+						continue;
+					return false;
+				}
+				if (!hasDigit)
+					return false;
+
+				Parser parser{ expr.c_str() };
+				double result = parser.ParseExpr();
+				parser.SkipSpace();
+				if (!parser.ok || *parser.p != '\0')
+					return false;
+
+				outResult = result;
+				return true;
+			}
+
+			std::string FormatResult(double value)
+			{
+				char buf[64];
+				if (std::fabs(value - std::round(value)) < 1e-9 && std::fabs(value) < 1e15)
+				{
+					snprintf(buf, sizeof(buf), "%.0f", value);
+					return buf;
+				}
+
+				snprintf(buf, sizeof(buf), "%.4f", value);
+				std::string s = buf;
+				size_t last = s.find_last_not_of('0');
+				if (s[last] == '.')
+					--last;
+				s.erase(last + 1);
+				return s;
+			}
+		}
+
 		void RenderSearchWidget(IModLoaderImGui* imgui)
 		{
 			float dispW = 1920.0f, dispH = 1080.0f;
@@ -352,6 +476,18 @@ namespace CodexUI
 			const std::string term = ToLower(g_searchBuffer);
 			if (term.empty())
 				return;
+
+			// If the box holds a valid arithmetic expression, show its
+			// result instead of running a recipe search.
+			double calcResult = 0.0;
+			if (Calculator::TryEvaluate(g_searchBuffer, calcResult))
+			{
+				imgui->Separator();
+				char line[64];
+				snprintf(line, sizeof(line), "= %s", Calculator::FormatResult(calcResult).c_str());
+				imgui->Text(line);
+				return;
+			}
 
 			if (!CodexRecipes::IsReady())
 				return;
