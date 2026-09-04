@@ -506,7 +506,17 @@ namespace CodexUI
 			// keybind would only fire on a *second* Enter press. Reading
 			// ImGui's own deactivated-after-edit flag (true the instant the
 			// field submits) sidesteps that entirely.
-			const bool submitted = imgui->IsItemDeactivatedAfterEdit();
+			//
+			// That flag also fires when a *click* steals focus from the box,
+			// which happens on the mouse-press frame - one frame before the
+			// clicked result row (a Selectable, which reports on release)
+			// can return true. Left unguarded, clicking any row would close
+			// the search and jump to the top result instead. So ignore a
+			// deactivation caused by a mouse press and let the row's own
+			// click handle it.
+			const bool deactivated = imgui->IsItemDeactivatedAfterEdit();
+			const bool mousePressed = imgui->IsMouseClicked(0, false) || imgui->IsMouseClicked(1, false);
+			const bool submitted = deactivated && !mousePressed;
 
 			// Refreshed below as results are matched; stale otherwise so
 			// Enter can't jump to a result that's no longer shown.
