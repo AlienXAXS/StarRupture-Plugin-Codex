@@ -7,11 +7,14 @@
 #include "Engine_classes.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace CodexUI
@@ -27,6 +30,12 @@ namespace CodexUI
 		PluginWidgetDesc  g_searchDesc{};
 		PluginPanelDesc   g_detailDesc{};
 
+		// Invisible one-frame widget that performs the detail panel's close -
+		// see RequestCloseDetail.
+		WidgetHandle      g_closerWidget = nullptr;
+		PluginWindowHints g_closerHints{};
+		PluginWidgetDesc  g_closerDesc{};
+
 		void* g_inputCaptureToken = nullptr;
 		bool  g_escapeRegistered = false;
 
@@ -34,12 +43,21 @@ namespace CodexUI
 		bool  g_detailVisible = false;
 		bool  g_justOpenedSearch = false;
 		char  g_searchBuffer[256] = "";
+
+		// Search box placeholder, naming the full-Codex key. Rebuilt each time
+		// the search opens so a rebind in the config is picked up.
+		std::string g_searchHint = "Search recipes and buildings...";
 		void* g_selectedNativeRecipe = nullptr;
 
-		// Native recipe of the top-most row currently shown by
-		// RenderSearchWidget, refreshed every frame it renders - lets Enter
-		// jump straight to it without re-running the search match logic.
-		void* g_topSearchResult = nullptr;
+		// ImGui frame the detail panel last rendered on - lets pinned windows
+		// tell whether the Codex UI (and so the mouse) is currently up.
+		int   g_detailLastFrame = -1000;
+
+		// Top-most row currently shown by RenderSearchWidget, refreshed every
+		// frame it renders - lets Enter jump straight to it without re-running
+		// the search match logic. A recipe wins over a building.
+		void*       g_topSearchResult = nullptr;
+		std::string g_topSearchBuilding;
 
 		// Set when the user clicks an output item; drives the "used in..."
 		// popup listing every recipe that consumes that item as an input.
@@ -47,24 +65,40 @@ namespace CodexUI
 		std::string g_consumersItemDisplayName;
 		bool        g_openConsumersPopup = false;
 
+		// Detail panel tabs. g_requestedTab forces a tab on the next frame
+		// (e.g. clicking a recipe in the building browser jumps to Recipe).
+		enum class DetailTab { None, Recipe, Buildings };
+		DetailTab g_requestedTab = DetailTab::None;
+
+		// Building browser selection, by BuildingGroup::displayName so it
+		// survives a recipe rescan. g_requestedTier forces a tier tab.
+		std::string g_selectedBuildingGroup;
+		int         g_requestedTier = 0;
+
 		// ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap
 		// Used for the (single-column) search result rows only.
 		constexpr int kSelectableFlags = (1 << 1) | (1 << 4);
 
 		// ImGuiSelectableFlags_AllowOverlap - deliberately WITHOUT
-		// SpanAllColumns, since these rows live inside a 2-column table and
+		// SpanAllColumns, since these rows live inside multi-column tables and
 		// SpanAllColumns would make a click in either column's row cover the
 		// whole table width, triggering whichever item happened to be drawn
 		// underneath in the other column.
 		constexpr int kItemSelectableFlags = (1 << 4);
 
 		constexpr int kColumnFlagsWidthStretch = 1 << 3;
+		constexpr int kTabItemFlagsSetSelected = 1 << 1;
+		constexpr int kWindowFlagsAlwaysAutoResize = 1 << 6;
 
 		void OnEscapePressed(EModKey key, EModKeyEvent event);
 		void OnSearchKeyPressed(EModKey key, EModKeyEvent event);
+		void OnCodexKeyPressed(EModKey key, EModKeyEvent event);
 		void CloseSearch();
 		void CloseDetail();
 		void OnDetailPanelClosed(PanelHandle handle);
+		void PinRecipe(void* nativeRecipe);
+		bool IsPinned(void* nativeRecipe);
+		bool HasFreePinSlot();
 
 		std::string ToLower(const std::string& s)
 		{
@@ -72,6 +106,15 @@ namespace CodexUI
 			std::transform(out.begin(), out.end(), out.begin(),
 				[](unsigned char c) { return static_cast<char>(std::tolower(c)); });
 			return out;
+		}
+
+		// Rows are keyed by native recipe pointer rather than display name:
+		// tiered recipes (e.g. Titanium Rod in Fabricator Tier 1 and Tier 2)
+		// share a name, and ImGui would otherwise see duplicate IDs.
+		void PushIDPtr(IModLoaderImGui* imgui, const void* ptr)
+		{
+			const auto bits = reinterpret_cast<uintptr_t>(ptr);
+			imgui->PushIDInt(static_cast<int>(bits ^ (bits >> 32)));
 		}
 
 		bool InChimeraMain()
@@ -104,6 +147,7 @@ namespace CodexUI
 		// Escape should close whichever Codex window is open, so both
 		// OpenSearch and OpenDetail register it - reference-counted via
 		// g_escapeRegistered so the first one in / last one out owns it.
+		// Pinned windows deliberately don't: they stay up until unpinned.
 		void AcquireEscape()
 		{
 			if (g_escapeRegistered)
@@ -132,6 +176,8 @@ namespace CodexUI
 			g_searchVisible = true;
 			g_searchBuffer[0] = '\0';
 			g_justOpenedSearch = true;
+			g_searchHint = std::string("Search recipes and buildings (") +
+				CodexConfig::Config::GetCodexKey() + " opens full Codex)";
 
 			if (g_self && g_self->hooks->UI && g_searchWidget)
 				g_self->hooks->UI->SetWidgetVisible(g_searchWidget, true);
@@ -147,6 +193,7 @@ namespace CodexUI
 
 			g_searchVisible = false;
 			g_topSearchResult = nullptr;
+			g_topSearchBuilding.clear();
 
 			if (g_self && g_self->hooks->UI && g_searchWidget)
 				g_self->hooks->UI->SetWidgetVisible(g_searchWidget, false);
@@ -155,25 +202,46 @@ namespace CodexUI
 			ReleaseCaptureIfIdle();
 		}
 
+		void ShowDetailPanel()
+		{
+			if (g_detailVisible)
+				return;
+
+			g_detailVisible = true;
+			if (g_self && g_self->hooks->UI && g_detailPanel)
+				g_self->hooks->UI->SetPanelOpen(g_detailPanel);
+			AcquireEscape();
+			AcquireCapture();
+		}
+
 		void OpenDetail(void* nativeRecipe)
 		{
 			g_selectedNativeRecipe = nativeRecipe;
-
-			if (!g_detailVisible)
-			{
-				g_detailVisible = true;
-				if (g_self && g_self->hooks->UI && g_detailPanel)
-					g_self->hooks->UI->SetPanelOpen(g_detailPanel);
-				AcquireEscape();
-				AcquireCapture();
-			}
+			g_requestedTab = DetailTab::Recipe;
+			ShowDetailPanel();
 		}
 
-		// Requests the host close the panel. This runs the shared cleanup
-		// via OnDetailPanelClosed (fired synchronously by SetPanelClose),
-		// the same path taken when the user clicks the window's own X
-		// button - there is only one place that resets our state.
-		void CloseDetail()
+		// Opens the building browser on a group, optionally jumping to a
+		// specific tier tab (0 = leave the tier selection alone).
+		void OpenBuilding(const std::string& groupName, int tier)
+		{
+			g_selectedBuildingGroup = groupName;
+			g_requestedTier = tier;
+			g_requestedTab = DetailTab::Buildings;
+			ShowDetailPanel();
+		}
+
+		// Requests the host close the panel right now. This runs the shared
+		// cleanup via OnDetailPanelClosed (fired synchronously by
+		// SetPanelClose), the same path taken when the user clicks the
+		// window's own X button - there is only one place that resets our
+		// state.
+		//
+		// Must NOT be called from inside the panel's own render callback (or
+		// from another thread while it may be rendering): the host snapshots
+		// the panel's open flag before calling renderFn and writes it back
+		// afterwards, silently undoing the close. Use CloseDetail() instead.
+		void CloseDetailNow()
 		{
 			if (!g_detailVisible)
 				return;
@@ -182,6 +250,27 @@ namespace CodexUI
 				g_self->hooks->UI->SetPanelClose(g_detailPanel);
 			else
 				OnDetailPanelClosed(g_detailPanel);
+		}
+
+		// Defers the close to the closer widget, which the host renders after
+		// every panel on the render thread - so its SetPanelClose can't be
+		// overwritten by the panel render loop.
+		void CloseDetail()
+		{
+			if (!g_detailVisible)
+				return;
+
+			if (g_self && g_self->hooks->UI && g_closerWidget)
+				g_self->hooks->UI->SetWidgetVisible(g_closerWidget, true);
+			else
+				CloseDetailNow();
+		}
+
+		void RenderCloserWidget(IModLoaderImGui* /*imgui*/)
+		{
+			if (g_self && g_self->hooks->UI && g_closerWidget)
+				g_self->hooks->UI->SetWidgetVisible(g_closerWidget, false);
+			CloseDetailNow();
 		}
 
 		// Fired by the host whenever the panel closes, whether from our own
@@ -193,8 +282,8 @@ namespace CodexUI
 				return;
 
 			g_detailVisible = false;
-			g_selectedNativeRecipe = nullptr;
 			g_consumersItemName.clear();
+			g_detailLastFrame = -1000;
 
 			ReleaseEscapeIfIdle();
 			ReleaseCaptureIfIdle();
@@ -226,6 +315,55 @@ namespace CodexUI
 			OpenSearch();
 		}
 
+		// Toggles the full Codex window. Opens on the last recipe viewed, or
+		// the Buildings tab if nothing has been picked yet. The mod loader
+		// gives an exact modifier match (Shift+N) priority over a plain bind
+		// on the same key (N), so this never also opens the search box.
+		void OnCodexKeyPressed(EModKey /*key*/, EModKeyEvent event)
+		{
+			if (event != EModKeyEvent::Pressed)
+				return;
+
+			if (g_detailVisible)
+			{
+				CloseDetail();
+				return;
+			}
+
+			if (!InChimeraMain())
+			{
+				LOG_DEBUG("CodexUI: codex key ignored (not in ChimeraMain)");
+				return;
+			}
+
+			CloseSearch();
+			g_requestedTab = g_selectedNativeRecipe ? DetailTab::Recipe : DetailTab::Buildings;
+			ShowDetailPanel();
+		}
+
+		// Height of a row showing an icon beside a name + sub-line (the
+		// sub-line is pulled up 4px, see RenderItemRow). Sized from whichever
+		// is taller, so larger UI font scales don't push the sub-line past the
+		// row's clickable area.
+		float TwoLineRowHeight(IModLoaderImGui* imgui, float iconSize)
+		{
+			const float textHeight = imgui->GetTextLineHeightWithSpacing() + imgui->GetTextLineHeight() - 4.0f;
+			return (std::max)(iconSize, textHeight) + 4.0f;
+		}
+
+		// Icon (if loaded) + name, as one line. Shared by every recipe list.
+		void RenderRecipeLabel(IModLoaderImGui* imgui, IPluginImGuiTextures* textures,
+			const CodexRecipes::RecipeInfo& recipe, float iconSize)
+		{
+			PluginTextureHandle icon = CodexIcons::GetIcon(recipe.output.uniqueItemName);
+			if (icon && textures)
+			{
+				textures->Image(icon, iconSize, iconSize);
+				imgui->SameLine(0.0f, 6.0f);
+			}
+			imgui->Text(recipe.displayName.c_str());
+		}
+
 		// Renders one ingredient/output row: icon + name + count (and rate,
 		// if known). Clicking an input row jumps to the recipe that
 		// produces that input, if one is known. Clicking the output row
@@ -241,7 +379,7 @@ namespace CodexUI
 			// icon scan hadn't finished loading textures yet).
 			PluginTextureHandle icon = CodexIcons::GetIcon(item.uniqueItemName);
 
-			bool clicked = imgui->SelectableFull("##item_row", false, kItemSelectableFlags, 0.0f, iconSize + 6.0f);
+			bool clicked = imgui->SelectableFull("##item_row", false, kItemSelectableFlags, 0.0f, TwoLineRowHeight(imgui, iconSize));
 			imgui->SameLine(0.0f, 0.0f);
 
 			if (icon && textures)
@@ -315,17 +453,17 @@ namespace CodexUI
 			{
 				for (const CodexRecipes::RecipeInfo& consumer : consumers)
 				{
-					imgui->PushIDStr(consumer.displayName.c_str());
+					PushIDPtr(imgui, consumer.nativeRecipe);
 					bool clicked = imgui->SelectableFull("##consumer_row", false, kSelectableFlags, 0.0f, 22.0f);
 					imgui->SameLine(0.0f, 0.0f);
-
-					PluginTextureHandle icon = CodexIcons::GetIcon(consumer.output.uniqueItemName);
-					if (icon && textures)
+					RenderRecipeLabel(imgui, textures, consumer, 18.0f);
+					if (consumer.hasTierVariants)
 					{
-						textures->Image(icon, 18.0f, 18.0f);
+						char tierLabel[32];
+						snprintf(tierLabel, sizeof(tierLabel), "(Tier %d)", consumer.minTier);
 						imgui->SameLine(0.0f, 6.0f);
+						imgui->TextDisabled(tierLabel);
 					}
-					imgui->Text(consumer.displayName.c_str());
 					imgui->PopID();
 
 					if (clicked)
@@ -497,7 +635,7 @@ namespace CodexUI
 			}
 
 			imgui->SetNextItemWidth(-1.0f);
-			imgui->InputTextWithHint("##Codex_Search_Input", "Search recipes...", g_searchBuffer, sizeof(g_searchBuffer));
+			imgui->InputTextWithHint("##Codex_Search_Input", g_searchHint.c_str(), g_searchBuffer, sizeof(g_searchBuffer));
 
 			// Detected directly off the InputText widget rather than a
 			// global "Enter" keybind: the modloader's hotkey system only
@@ -521,6 +659,7 @@ namespace CodexUI
 			// Refreshed below as results are matched; stale otherwise so
 			// Enter can't jump to a result that's no longer shown.
 			g_topSearchResult = nullptr;
+			g_topSearchBuilding.clear();
 
 			// Nothing typed yet - just the search box, nothing else.
 			const std::string term = ToLower(g_searchBuffer);
@@ -549,6 +688,7 @@ namespace CodexUI
 			IPluginImGuiTextures* textures = GetHooks() ? GetHooks()->ImGuiTextures : nullptr;
 
 			constexpr int kMaxResults = 10;
+			constexpr int kMaxBuildingResults = 3;
 			int shown = 0;
 
 			imgui->Separator();
@@ -564,26 +704,56 @@ namespace CodexUI
 				if (shown == 0)
 					g_topSearchResult = recipe.nativeRecipe;
 
-				imgui->PushIDStr(recipe.displayName.c_str());
+				PushIDPtr(imgui, recipe.nativeRecipe);
 				bool clicked = imgui->SelectableFull("##recipe_row", false, kSelectableFlags, 0.0f, 22.0f);
 				imgui->SameLine(0.0f, 0.0f);
+				RenderRecipeLabel(imgui, textures, recipe, 18.0f);
 
-				PluginTextureHandle icon = CodexIcons::GetIcon(recipe.output.uniqueItemName);
-				if (icon && textures)
-				{
-					textures->Image(icon, 18.0f, 18.0f);
-					imgui->SameLine(0.0f, 6.0f);
-				}
-				imgui->Text(recipe.displayName.c_str());
+				// Tiered recipes share a name - the building tells them apart.
+				imgui->SameLine(0.0f, 10.0f);
+				imgui->TextDisabled(recipe.buildingName.c_str());
 				imgui->PopID();
 
 				if (clicked)
 				{
 					CloseSearch();
 					OpenDetail(recipe.nativeRecipe);
+					return;
 				}
 
 				++shown;
+			}
+
+			int shownBuildings = 0;
+			for (const CodexRecipes::BuildingGroup& group : CodexRecipes::GetBuildingGroups())
+			{
+				if (shownBuildings >= kMaxBuildingResults)
+					break;
+
+				if (ToLower(group.displayName).find(term) == std::string::npos)
+					continue;
+
+				if (shownBuildings == 0 && shown > 0)
+					imgui->Separator();
+				if (shownBuildings == 0 && !g_topSearchResult)
+					g_topSearchBuilding = group.displayName;
+
+				imgui->PushIDStr(group.displayName.c_str());
+				bool clicked = imgui->SelectableFull("##building_row", false, kSelectableFlags, 0.0f, 22.0f);
+				imgui->SameLine(0.0f, 0.0f);
+				imgui->Text(group.displayName.c_str());
+				imgui->SameLine(0.0f, 10.0f);
+				imgui->TextDisabled("Building");
+				imgui->PopID();
+
+				if (clicked)
+				{
+					CloseSearch();
+					OpenBuilding(group.displayName, 0);
+					return;
+				}
+
+				++shownBuildings;
 			}
 
 			if (submitted && g_topSearchResult)
@@ -592,30 +762,56 @@ namespace CodexUI
 				CloseSearch();
 				OpenDetail(target);
 			}
+			else if (submitted && !g_topSearchBuilding.empty())
+			{
+				std::string target = g_topSearchBuilding;
+				CloseSearch();
+				OpenBuilding(target, 0);
+			}
 		}
 
-		void RenderDetailWidget(IModLoaderImGui* imgui)
+		void RenderRecipeTab(IModLoaderImGui* imgui, IPluginImGuiTextures* textures)
 		{
-			if (imgui->Button("Close"))
-			{
-				CloseDetail();
-				return;
-			}
-
 			CodexRecipes::RecipeInfo info;
 			if (!g_selectedNativeRecipe || !CodexRecipes::FindByNativeRecipe(g_selectedNativeRecipe, info))
 			{
-				imgui->TextDisabled("No recipe selected.");
+				imgui->TextDisabled("No recipe selected. Search for one, or pick a building in the Buildings tab.");
 				return;
 			}
+
+			const bool pinned = IsPinned(info.nativeRecipe);
+			const bool canPin = !pinned && HasFreePinSlot();
+			imgui->BeginDisabled(!canPin);
+			if (imgui->SmallButton(pinned ? "Pinned" : "Pin"))
+				PinRecipe(info.nativeRecipe);
+			imgui->EndDisabled();
+			if (!pinned && !canPin)
+				imgui->SetItemTooltip("All pin slots are in use - unpin a recipe first.");
+			else if (!pinned)
+				imgui->SetItemTooltip("Keep this recipe on screen while you play.");
 
 			imgui->SameLine(0.0f, 12.0f);
 			imgui->SeparatorText(info.displayName.c_str());
 
-			char line[256];
-			snprintf(line, sizeof(line), "Made in: %s", info.buildingName.c_str());
-			imgui->Text(line);
+			// "Made in: Fabricator (Tier 1), Fabricator (Tier 2)" - each
+			// building is a link into the building browser.
+			imgui->Text("Made in:");
+			for (size_t i = 0; i < info.buildings.size(); ++i)
+			{
+				const CodexRecipes::BuildingRef& building = info.buildings[i];
+				imgui->SameLine(0.0f, i == 0 ? 6.0f : 0.0f);
+				imgui->PushIDInt(static_cast<int>(i));
+				if (imgui->TextLink(building.label.c_str()))
+					OpenBuilding(building.groupName, building.tier);
+				imgui->PopID();
+				if (i + 1 < info.buildings.size())
+				{
+					imgui->SameLine(0.0f, 0.0f);
+					imgui->Text(", ");
+				}
+			}
 
+			char line[256];
 			if (info.buildTimeSeconds > 0.0f)
 				snprintf(line, sizeof(line), "Craft time: %.1fs  (%.1f/min)", info.buildTimeSeconds, info.outputsPerMinute);
 			else
@@ -624,7 +820,6 @@ namespace CodexUI
 
 			imgui->Separator();
 
-			IPluginImGuiTextures* textures = GetHooks() ? GetHooks()->ImGuiTextures : nullptr;
 			constexpr float kIconSize = 32.0f;
 
 			if (imgui->BeginTable("##Codex_Detail_Columns", 2, 0))
@@ -652,6 +847,425 @@ namespace CodexUI
 			}
 
 			RenderConsumersPopup(imgui, textures);
+		}
+
+		// The recipes one building tier can craft, as a grid of icon rows.
+		// Left-click opens the recipe; right-click pins it.
+		void RenderTierRecipes(IModLoaderImGui* imgui, IPluginImGuiTextures* textures,
+			const CodexRecipes::BuildingTier& tier)
+		{
+			if (tier.recipes.empty())
+			{
+				imgui->TextDisabled("This building has no known recipes.");
+				return;
+			}
+
+			constexpr float kIconSize = 28.0f;
+			constexpr float kMinColumnWidth = 240.0f;
+
+			float availW = 0.0f, availH = 0.0f;
+			imgui->GetContentRegionAvail(&availW, &availH);
+			const float fontScale = (std::max)(1.0f, imgui->GetFontSize() / kBaselineFontSize);
+			const int columns = (std::max)(1, static_cast<int>(availW / (kMinColumnWidth * fontScale)));
+
+			if (!imgui->BeginTable("##tier_recipes", columns, 0))
+				return;
+
+			for (int c = 0; c < columns; ++c)
+				imgui->TableSetupColumn(nullptr, kColumnFlagsWidthStretch, 1.0f);
+
+			for (void* nativeRecipe : tier.recipes)
+			{
+				CodexRecipes::RecipeInfo recipe;
+				if (!CodexRecipes::FindByNativeRecipe(nativeRecipe, recipe))
+					continue;
+
+				imgui->TableNextColumn();
+				PushIDPtr(imgui, nativeRecipe);
+
+				bool clicked = imgui->SelectableFull("##tier_recipe", recipe.nativeRecipe == g_selectedNativeRecipe,
+					kItemSelectableFlags, 0.0f, TwoLineRowHeight(imgui, kIconSize));
+				const bool rightClicked = imgui->IsItemClicked(1);
+				if (imgui->IsItemHovered())
+					imgui->SetTooltip(IsPinned(nativeRecipe)
+						? "Click to view (pinned)"
+						: "Click to view, right-click to pin");
+				imgui->SameLine(0.0f, 0.0f);
+
+				PluginTextureHandle icon = CodexIcons::GetIcon(recipe.output.uniqueItemName);
+				if (icon && textures)
+				{
+					textures->Image(icon, kIconSize, kIconSize);
+					imgui->SameLine(0.0f, 6.0f);
+				}
+
+				imgui->BeginGroup();
+				imgui->Text(recipe.displayName.c_str());
+				char sub[64];
+				if (recipe.outputsPerMinute > 0.0f)
+					snprintf(sub, sizeof(sub), "%.1f/min", recipe.outputsPerMinute);
+				else
+					snprintf(sub, sizeof(sub), "x%d", recipe.output.count);
+				imgui->SetCursorPosY(imgui->GetCursorPosY() - 4.0f);
+				imgui->TextDisabled(sub);
+				imgui->EndGroup();
+
+				imgui->PopID();
+
+				if (rightClicked && !IsPinned(nativeRecipe))
+					PinRecipe(nativeRecipe);
+				else if (clicked)
+					OpenDetail(nativeRecipe);
+			}
+
+			imgui->EndTable();
+		}
+
+		void RenderBuildingsTab(IModLoaderImGui* imgui, IPluginImGuiTextures* textures)
+		{
+			if (!CodexRecipes::IsReady())
+			{
+				imgui->TextDisabled("Recipes are still loading...");
+				return;
+			}
+
+			std::vector<CodexRecipes::BuildingGroup> groups = CodexRecipes::GetBuildingGroups();
+			if (groups.empty())
+			{
+				imgui->TextDisabled("No crafting buildings found.");
+				return;
+			}
+
+			const CodexRecipes::BuildingGroup* selected = nullptr;
+			for (const CodexRecipes::BuildingGroup& group : groups)
+			{
+				if (group.displayName == g_selectedBuildingGroup)
+					selected = &group;
+			}
+			if (!selected)
+			{
+				selected = &groups.front();
+				g_selectedBuildingGroup = selected->displayName;
+			}
+
+			const float fontScale = (std::max)(1.0f, imgui->GetFontSize() / kBaselineFontSize);
+
+			if (imgui->BeginChild("##building_list", 190.0f * fontScale, 0.0f, true))
+			{
+				for (const CodexRecipes::BuildingGroup& group : groups)
+				{
+					imgui->PushIDStr(group.displayName.c_str());
+					if (imgui->Selectable(group.displayName.c_str(), &group == selected))
+					{
+						g_selectedBuildingGroup = group.displayName;
+						g_requestedTier = 0;
+					}
+					imgui->PopID();
+				}
+			}
+			imgui->EndChild();
+
+			imgui->SameLine(0.0f, 8.0f);
+
+			if (imgui->BeginChild("##building_recipes", 0.0f, 0.0f, false))
+			{
+				imgui->SeparatorText(selected->displayName.c_str());
+
+				if (selected->tiers.size() == 1)
+				{
+					RenderTierRecipes(imgui, textures, selected->tiers.front());
+				}
+				else if (imgui->BeginTabBar("##building_tiers", 0))
+				{
+					for (const CodexRecipes::BuildingTier& tier : selected->tiers)
+					{
+						char label[32];
+						snprintf(label, sizeof(label), "Tier %d", tier.tier);
+						const int flags = g_requestedTier == tier.tier ? kTabItemFlagsSetSelected : 0;
+						if (imgui->BeginTabItem(label, nullptr, flags))
+						{
+							RenderTierRecipes(imgui, textures, tier);
+							imgui->EndTabItem();
+						}
+					}
+					imgui->EndTabBar();
+				}
+				g_requestedTier = 0;
+			}
+			imgui->EndChild();
+		}
+
+		void RenderDetailWidget(IModLoaderImGui* imgui)
+		{
+			// Opened from the mod loader's own panel list rather than via
+			// OpenDetail - adopt it so Escape and our state track it too.
+			if (!g_detailVisible)
+			{
+				g_detailVisible = true;
+				AcquireEscape();
+				AcquireCapture();
+				if (!g_selectedNativeRecipe && g_requestedTab == DetailTab::None)
+					g_requestedTab = DetailTab::Buildings;
+			}
+			g_detailLastFrame = imgui->GetFrameCount();
+
+			if (imgui->Button("Close"))
+			{
+				CloseDetail();
+				return;
+			}
+
+			// Opens the search box over this window; picking a result then
+			// navigates here instead of opening a new window.
+			imgui->SameLine(0.0f, 6.0f);
+			if (imgui->Button("Search"))
+				OpenSearch();
+
+			IPluginImGuiTextures* textures = GetHooks() ? GetHooks()->ImGuiTextures : nullptr;
+
+			const DetailTab requested = g_requestedTab;
+			g_requestedTab = DetailTab::None;
+
+			if (imgui->BeginTabBar("##codex_tabs", 0))
+			{
+				if (imgui->BeginTabItem("Recipe", nullptr, requested == DetailTab::Recipe ? kTabItemFlagsSetSelected : 0))
+				{
+					RenderRecipeTab(imgui, textures);
+					imgui->EndTabItem();
+				}
+				if (imgui->BeginTabItem("Buildings", nullptr, requested == DetailTab::Buildings ? kTabItemFlagsSetSelected : 0))
+				{
+					RenderBuildingsTab(imgui, textures);
+					imgui->EndTabItem();
+				}
+				imgui->EndTabBar();
+			}
+		}
+
+		// ------------------------------------------------------------------
+		// Pinned recipes
+		//
+		// Each pin is its own always-visible widget window. Widgets never
+		// acquire input capture on their own, and the modloader only feeds
+		// ImGui the mouse while something holds capture - so with only pins
+		// on screen, the game keeps every mouse/keyboard input. While the
+		// Codex search/detail is open (which does hold capture) the pins
+		// become interactive: drag to move, Unpin to close.
+		//
+		// Widget render callbacks carry no user data, so a fixed pool of
+		// slots each gets its own template-instantiated callback.
+		// ------------------------------------------------------------------
+		constexpr int kMaxPins = 8;
+
+		struct PinSlot
+		{
+			void*             nativeRecipe = nullptr;
+			WidgetHandle      widget = nullptr;
+			PluginWidgetDesc  desc{};
+			PluginWindowHints hints{};
+			char              title[192] = "";
+		};
+
+		PinSlot g_pins[kMaxPins];
+		float   g_lastDisplayW = 1920.0f;
+
+		bool CodexUIActive(IModLoaderImGui* imgui)
+		{
+			return g_searchVisible || imgui->GetFrameCount() - g_detailLastFrame <= 1;
+		}
+
+		bool IsPinned(void* nativeRecipe)
+		{
+			for (const PinSlot& slot : g_pins)
+			{
+				if (slot.nativeRecipe && slot.nativeRecipe == nativeRecipe)
+					return true;
+			}
+			return false;
+		}
+
+		bool HasFreePinSlot()
+		{
+			for (const PinSlot& slot : g_pins)
+			{
+				if (!slot.nativeRecipe && slot.widget)
+					return true;
+			}
+			return false;
+		}
+
+		void PinRecipe(void* nativeRecipe)
+		{
+			if (!nativeRecipe || IsPinned(nativeRecipe))
+				return;
+
+			CodexRecipes::RecipeInfo info;
+			if (!CodexRecipes::FindByNativeRecipe(nativeRecipe, info))
+				return;
+
+			for (int i = 0; i < kMaxPins; ++i)
+			{
+				PinSlot& slot = g_pins[i];
+				if (slot.nativeRecipe || !slot.widget)
+					continue;
+
+				slot.nativeRecipe = nativeRecipe;
+				snprintf(slot.title, sizeof(slot.title), "%s###CodexPin%d", info.displayName.c_str(), i);
+
+				// Cascade new pins down the right-hand edge of the screen;
+				// placed once (cond Always for a single frame), after which
+				// the slot's render clears pos_x so the user's drag sticks.
+				slot.hints.pos_x   = g_lastDisplayW - 24.0f;
+				slot.hints.pos_y   = 140.0f + 36.0f * static_cast<float>(i);
+				slot.hints.pivot_x = 1.0f;
+				slot.hints.pivot_y = 0.0f;
+				slot.hints.pos_cond = 0;
+
+				if (g_self && g_self->hooks->UI)
+					g_self->hooks->UI->SetWidgetVisible(slot.widget, true);
+				return;
+			}
+		}
+
+		void UnpinSlot(int index)
+		{
+			PinSlot& slot = g_pins[index];
+			slot.nativeRecipe = nullptr;
+			if (g_self && g_self->hooks->UI && slot.widget)
+				g_self->hooks->UI->SetWidgetVisible(slot.widget, false);
+		}
+
+		void RenderPinSlot(int index, IModLoaderImGui* imgui)
+		{
+			PinSlot& slot = g_pins[index];
+
+			float dispW = 0.0f, dispH = 0.0f;
+			imgui->GetDisplaySize(&dispW, &dispH);
+			if (dispW > 0.0f)
+				g_lastDisplayW = dispW;
+
+			// The initial placement has now been applied - stop forcing it.
+			slot.hints.pos_x = -1.0f;
+			slot.hints.pos_y = -1.0f;
+
+			// Applied next frame. NoMouseInputs while the Codex is closed is
+			// belt-and-braces: ImGui isn't fed the mouse then anyway, but a
+			// stale cursor position must never make a pin eat a click.
+			const bool interactive = CodexUIActive(imgui);
+			slot.hints.extra_window_flags = kWindowFlagsAlwaysAutoResize | PluginWindowFlags_NoSavedSettings |
+				(interactive ? 0 : PluginWindowFlags_NoMouseInputs);
+
+			CodexRecipes::RecipeInfo info;
+			if (!slot.nativeRecipe || !CodexRecipes::FindByNativeRecipe(slot.nativeRecipe, info))
+			{
+				imgui->TextDisabled("Recipe unavailable.");
+				if (interactive && imgui->SmallButton("Unpin"))
+					UnpinSlot(index);
+				return;
+			}
+
+			IPluginImGuiTextures* textures = GetHooks() ? GetHooks()->ImGuiTextures : nullptr;
+			constexpr float kIconSize = 20.0f;
+
+			char line[256];
+			snprintf(line, sizeof(line), "%s  -  %.1fs", info.buildingName.c_str(), info.buildTimeSeconds);
+			imgui->TextDisabled(line);
+
+			for (const CodexRecipes::RecipeItemRef& input : info.inputs)
+			{
+				PluginTextureHandle icon = CodexIcons::GetIcon(input.uniqueItemName);
+				if (icon && textures)
+				{
+					textures->Image(icon, kIconSize, kIconSize);
+					imgui->SameLine(0.0f, 6.0f);
+				}
+				const float rate = info.buildTimeSeconds > 0.0f
+					? (static_cast<float>(input.count) / info.buildTimeSeconds) * 60.0f
+					: 0.0f;
+				if (rate > 0.0f)
+					snprintf(line, sizeof(line), "%dx %s  (%.1f/min)", input.count, input.displayName.c_str(), rate);
+				else
+					snprintf(line, sizeof(line), "%dx %s", input.count, input.displayName.c_str());
+				imgui->AlignTextToFramePadding();
+				imgui->Text(line);
+			}
+
+			imgui->Separator();
+
+			PluginTextureHandle outIcon = CodexIcons::GetIcon(info.output.uniqueItemName);
+			if (outIcon && textures)
+			{
+				textures->Image(outIcon, kIconSize, kIconSize);
+				imgui->SameLine(0.0f, 6.0f);
+			}
+			if (info.outputsPerMinute > 0.0f)
+				snprintf(line, sizeof(line), "%dx %s  (%.1f/min)", info.output.count, info.output.displayName.c_str(), info.outputsPerMinute);
+			else
+				snprintf(line, sizeof(line), "%dx %s", info.output.count, info.output.displayName.c_str());
+			imgui->AlignTextToFramePadding();
+			imgui->Text(line);
+
+			if (interactive)
+			{
+				if (imgui->SmallButton("Open"))
+					OpenDetail(info.nativeRecipe);
+				imgui->SameLine(0.0f, 6.0f);
+				if (imgui->SmallButton("Unpin"))
+					UnpinSlot(index);
+			}
+		}
+
+		template <int Index>
+		void RenderPinSlotThunk(IModLoaderImGui* imgui)
+		{
+			RenderPinSlot(Index, imgui);
+		}
+
+		template <int... Indices>
+		constexpr auto MakePinRenderFns(std::integer_sequence<int, Indices...>)
+		{
+			return std::array<PluginImGuiRenderCallback, sizeof...(Indices)>{ &RenderPinSlotThunk<Indices>... };
+		}
+
+		constexpr auto kPinRenderFns = MakePinRenderFns(std::make_integer_sequence<int, kMaxPins>{});
+
+		void RegisterPinSlots(IPluginSelf* self)
+		{
+			for (int i = 0; i < kMaxPins; ++i)
+			{
+				PinSlot& slot = g_pins[i];
+				snprintf(slot.title, sizeof(slot.title), "Pinned Recipe###CodexPin%d", i);
+
+				slot.hints.width  = 0.0f;
+				slot.hints.height = 0.0f;
+				slot.hints.pos_x  = -1.0f;
+				slot.hints.pos_y  = -1.0f;
+				slot.hints.size_cond = 0;
+				slot.hints.pos_cond  = 0;
+				slot.hints.extra_window_flags = kWindowFlagsAlwaysAutoResize | PluginWindowFlags_NoSavedSettings |
+					PluginWindowFlags_NoMouseInputs;
+
+				slot.desc.name        = slot.title;
+				slot.desc.renderFn    = kPinRenderFns[i];
+				slot.desc.windowHints = &slot.hints;
+
+				slot.widget = self->hooks->UI->RegisterWidget(&slot.desc);
+				if (slot.widget)
+					self->hooks->UI->SetWidgetVisible(slot.widget, false);
+			}
+		}
+
+		void UnregisterPinSlots(IPluginSelf* self)
+		{
+			for (PinSlot& slot : g_pins)
+			{
+				slot.nativeRecipe = nullptr;
+				if (slot.widget)
+				{
+					self->hooks->UI->UnregisterWidget(slot.widget);
+					slot.widget = nullptr;
+				}
+			}
 		}
 	}
 
@@ -693,14 +1307,41 @@ namespace CodexUI
 		g_detailPanel = self->hooks->UI->RegisterPanel(&g_detailDesc);
 		self->hooks->UI->RegisterOnPanelWindowClosed(&OnDetailPanelClosed);
 
+		// Zero-size, input-less and backgroundless: it exists for one frame
+		// only to run CloseDetailNow outside the panel render loop.
+		g_closerHints.width   = 1.0f;
+		g_closerHints.height  = 1.0f;
+		g_closerHints.pos_x   = 0.0f;
+		g_closerHints.pos_y   = 0.0f;
+		g_closerHints.pivot_x = 0.0f;
+		g_closerHints.pivot_y = 0.0f;
+		g_closerHints.size_cond = 0;
+		g_closerHints.pos_cond  = 0;
+		g_closerHints.extra_window_flags = PluginWindowFlags_NoTitleBar | PluginWindowFlags_NoResize |
+			PluginWindowFlags_NoMove | PluginWindowFlags_NoScrollbar | PluginWindowFlags_NoBackground |
+			PluginWindowFlags_NoSavedSettings | PluginWindowFlags_NoMouseInputs;
+
+		g_closerDesc.name        = "##CodexCloser";
+		g_closerDesc.renderFn    = &RenderCloserWidget;
+		g_closerDesc.windowHints = &g_closerHints;
+		g_closerWidget = self->hooks->UI->RegisterWidget(&g_closerDesc);
+		if (g_closerWidget)
+			self->hooks->UI->SetWidgetVisible(g_closerWidget, false);
+
+		RegisterPinSlots(self);
+
 		if (self->hooks->Input)
 		{
 			const char* searchKey = CodexConfig::Config::GetSearchKey();
 			LOG_DEBUG("CodexUI: registering search keybind '%s'", searchKey);
 			self->hooks->Input->RegisterKeybindByName(searchKey, EModKeyEvent::Pressed, &OnSearchKeyPressed);
+
+			const char* codexKey = CodexConfig::Config::GetCodexKey();
+			LOG_DEBUG("CodexUI: registering codex keybind '%s'", codexKey);
+			self->hooks->Input->RegisterKeybindByName(codexKey, EModKeyEvent::Pressed, &OnCodexKeyPressed);
 		}
 
-		LOG_INFO("CodexUI: search and detail windows registered");
+		LOG_INFO("CodexUI: search, detail and pin windows registered");
 	}
 
 	void Shutdown(IPluginSelf* self)
@@ -712,12 +1353,21 @@ namespace CodexUI
 		}
 
 		CloseSearch();
-		CloseDetail();
+		CloseDetailNow();
+
+		if (g_closerWidget)
+		{
+			self->hooks->UI->UnregisterWidget(g_closerWidget);
+			g_closerWidget = nullptr;
+		}
 
 		if (self->hooks->Input)
 		{
 			const char* searchKey = CodexConfig::Config::GetSearchKey();
 			self->hooks->Input->UnregisterKeybindByName(searchKey, EModKeyEvent::Pressed, &OnSearchKeyPressed);
+
+			const char* codexKey = CodexConfig::Config::GetCodexKey();
+			self->hooks->Input->UnregisterKeybindByName(codexKey, EModKeyEvent::Pressed, &OnCodexKeyPressed);
 		}
 
 		if (g_searchWidget)
@@ -725,6 +1375,8 @@ namespace CodexUI
 			self->hooks->UI->UnregisterWidget(g_searchWidget);
 			g_searchWidget = nullptr;
 		}
+
+		UnregisterPinSlots(self);
 
 		self->hooks->UI->UnregisterOnPanelWindowClosed(&OnDetailPanelClosed);
 		if (g_detailPanel)

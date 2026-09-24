@@ -11,10 +11,18 @@ what it produces.
 ## Features
 
 - **Recipe search** -- press the configurable keybind (default `N`) to open a search box,
-  type an item or recipe name, and jump to its detail view. Close with `Esc`.
+  type an item, recipe or building name, and jump to its detail view. Close with `Esc`.
+- **Full Codex window** -- press `Shift+N` (configurable) to open the Codex straight to the
+  last recipe you viewed, or the building browser if you haven't picked one yet.
 - **Recipe detail window** -- shows a recipe's inputs and outputs side by side, each with
   icon, name, count, and craft rate (items/min). Click an input to jump to the recipe that
-  produces it; click an output to see every recipe that consumes it.
+  produces it; click an output to see every recipe that consumes it. Click a building under
+  "Made in" to browse everything that building makes.
+- **Building browser** -- the Buildings tab lists every crafting building and the recipes it
+  can produce. Tiered buildings are grouped under one name (e.g. "Fabricator") with a
+  Tier 1 / Tier 2 tab for each tier. Click a recipe to open it, right-click to pin it.
+- **Pinned recipes** -- pin up to 8 recipes to keep them on screen while you play. Pinned
+  windows never block game input; open the Codex (`N`) to drag them around or unpin them.
 - **Configurable** -- enable/disable the plugin and rebind the search key from the mod
   loader's config file.
 
@@ -26,6 +34,7 @@ Settings are written to the plugin's config file on first run and can be edited 
 | --- | --- | --- | --- |
 | `General` | `Enabled` | `true` | Enable or disable Codex |
 | `Menu` | `SearchKey` | `N` | Key to open the recipe search box |
+| `Menu` | `CodexKey` | `Shift+N` | Key to open (or close) the full Codex window |
 
 ---
 

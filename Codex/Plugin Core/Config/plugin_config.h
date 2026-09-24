@@ -18,6 +18,13 @@ namespace CodexConfig
 			ConfigValueType::Keybind,
 			"N",
 			"Key to open the recipe search box"
+		},
+		{
+			"Menu",
+			"CodexKey",
+			ConfigValueType::Keybind,
+			"Shift+N",
+			"Key to open (or close) the full Codex window"
 		}
 	};
 
@@ -54,6 +61,15 @@ namespace CodexConfig
 			if (s_self && s_self->config->ReadString(s_self, "Menu", "SearchKey", buffer, sizeof(buffer), "N"))
 				return buffer;
 			return "N";
+		}
+
+		// Returns the current full-Codex-window keybind string (default "Shift+N").
+		static const char* GetCodexKey()
+		{
+			static char buffer[64];
+			if (s_self && s_self->config->ReadString(s_self, "Menu", "CodexKey", buffer, sizeof(buffer), "Shift+N"))
+				return buffer;
+			return "Shift+N";
 		}
 
 	private:
