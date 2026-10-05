@@ -159,7 +159,11 @@ namespace CodexRecipes
 						for (SDK::UCrItemRecipeCollection* extra : pair.Value().Collections)
 						{
 							if (extra && std::find(linked.begin(), linked.end(), extra) == linked.end())
+							{
 								linked.push_back(extra);
+								LOG_TRACE("CodexRecipes: [linked] %s += %s (subsystem %d)",
+									base->GetName().c_str(), extra->GetName().c_str(), i);
+							}
 						}
 					}
 				}
@@ -218,7 +222,11 @@ namespace CodexRecipes
 		// Finds (loading the package if needed) the asset packageName.assetName.
 		SDK::UObject* LoadAsset(const std::string& packageName, const std::string& assetName, SDK::UClass* cls)
 		{
-			if (packageName.empty() || assetName.empty() || !ResolveEngineLookupFunctions())
+			// A null FName stringifies as "None", and FindPackage raises a
+			// Fatal log (crash) when asked for a package named "None".
+			if (packageName.empty() || assetName.empty() || packageName == "None" || assetName == "None")
+				return nullptr;
+			if (!ResolveEngineLookupFunctions())
 				return nullptr;
 
 			const std::wstring packageNameW(packageName.begin(), packageName.end());
@@ -293,9 +301,16 @@ namespace CodexRecipes
 			std::unordered_set<SDK::UCrBuildingData*> seen;
 			for (const SDK::FAssetData& asset : parms.OutAssetData)
 			{
-				SDK::UObject* obj = LoadAsset(asset.PackageName.GetRawString(), asset.AssetName.ToString(), buildingClass);
+				const std::string packageName = asset.PackageName.GetRawString();
+				const std::string assetName   = asset.AssetName.ToString();
+				SDK::UObject* obj = LoadAsset(packageName, assetName, buildingClass);
 				auto* building = static_cast<SDK::UCrBuildingData*>(obj);
-				if (building && seen.insert(building).second)
+				if (!building)
+				{
+					LOG_TRACE("CodexRecipes: [building] %s.%s - FILTERED: asset failed to load.", packageName.c_str(), assetName.c_str());
+					continue;
+				}
+				if (seen.insert(building).second)
 					result.push_back(building);
 			}
 
@@ -377,8 +392,18 @@ namespace CodexRecipes
 					{
 						SDK::UCrBuildingData*         building   = pair.Key();
 						SDK::UCrItemRecipeCollection* collection = pair.Value();
-						if (building && collection && seen.insert(building).second)
+						if (!building || !collection)
+						{
+							LOG_TRACE("CodexRecipes: [building] %s (recipe owner) - FILTERED: null %s.",
+								building ? building->GetName().c_str() : "<null>", building ? "collection" : "building");
+							continue;
+						}
+						if (seen.insert(building).second)
+						{
 							result.push_back({ building, collection });
+							LOG_TRACE("CodexRecipes: [building] %s (recipe owner) - KEPT -> %s",
+								building->GetName().c_str(), collection->GetName().c_str());
+						}
 					}
 				}
 				catch (...)
@@ -404,20 +429,30 @@ namespace CodexRecipes
 					if (CanSkipBuildingType(building))
 					{
 						++skippedType;
+						LOG_TRACE("CodexRecipes: [building] %s (asset scan) - FILTERED: non-crafting building type %d.",
+							building->GetName().c_str(), static_cast<int>(building->Type));
 						continue;
 					}
 
 					SDK::UCrItemRecipeCollection* collection = nullptr;
 					CollectionLookup lookup = CollectionLookup::NoConfig;
+					bool lookupThrew = false;
 					try { lookup = FindBuildingCollection(building, collection); }
-					catch (...) {}
+					catch (...) { lookupThrew = true; }
 
+					const char* skipReason = nullptr;
 					switch (lookup)
 					{
-					case CollectionLookup::NoConfig:        ++noConfig;     continue;
-					case CollectionLookup::NoCraftingTrait: ++noTrait;      continue;
-					case CollectionLookup::NoCollection:    ++noCollection; continue;
+					case CollectionLookup::NoConfig:        ++noConfig;     skipReason = lookupThrew ? "exception resolving entity config" : "no entity config"; break;
+					case CollectionLookup::NoCraftingTrait: ++noTrait;      skipReason = "no crafting trait on entity config"; break;
+					case CollectionLookup::NoCollection:    ++noCollection; skipReason = "crafting trait has no recipe collection"; break;
 					case CollectionLookup::Found:           break;
+					}
+					if (skipReason)
+					{
+						LOG_TRACE("CodexRecipes: [building] %s (asset scan, type %d) - FILTERED: %s.",
+							building->GetName().c_str(), static_cast<int>(building->Type), skipReason);
+						continue;
 					}
 
 					seen.insert(building);
@@ -441,18 +476,28 @@ namespace CodexRecipes
 
 		// Mirrors UCrItemRecipeCollectionSubsystem::GatherRecipes: linked
 		// (GameFeature-added) collections first, then the base collection.
-		std::vector<SDK::UCrItemRecipeData*> GatherRecipes(SDK::UCrItemRecipeCollection* collection, const LinkedCollectionMap& linked)
+		std::vector<SDK::UCrItemRecipeData*> GatherRecipes(SDK::UCrItemRecipeCollection* collection, const LinkedCollectionMap& linked,
+			const std::string& buildingName)
 		{
 			std::vector<SDK::UCrItemRecipeData*> result;
 			std::unordered_set<SDK::UCrItemRecipeData*> seen;
 
-			auto append = [&](SDK::UCrItemRecipeCollection* source)
+			auto append = [&](SDK::UCrItemRecipeCollection* source, const char* kind)
 			{
 				if (!source)
 					return;
+				const std::string sourceName = source->GetName();
+				LOG_TRACE("CodexRecipes: [collection] %s <- %s collection %s (%d recipe slot(s))",
+					buildingName.c_str(), kind, sourceName.c_str(), source->Recipes.Num());
 				for (SDK::UCrItemRecipeData* recipe : source->Recipes)
 				{
-					if (recipe && seen.insert(recipe).second)
+					if (!recipe)
+					{
+						LOG_TRACE("CodexRecipes: [recipe] <null> in %s (%s) - FILTERED: null entry in collection.",
+							sourceName.c_str(), buildingName.c_str());
+						continue;
+					}
+					if (seen.insert(recipe).second)
 						result.push_back(recipe);
 				}
 			};
@@ -461,49 +506,81 @@ namespace CodexRecipes
 			if (it != linked.end())
 			{
 				for (SDK::UCrItemRecipeCollection* extra : it->second)
-					append(extra);
+					append(extra, "linked");
 			}
-			append(collection);
+			append(collection, "base");
 
 			return result;
 		}
 
 		// Returns false for recipes that shouldn't appear in the Codex
-		// (blueprint unlocks, placeholder/untranslated entries).
-		bool BuildRecipeInfo(SDK::UCrItemRecipeData* recipe, RecipeInfo& info)
+		// (blueprint unlocks, placeholder/untranslated entries), with the
+		// reason in outReason.
+		bool BuildRecipeInfo(SDK::UCrItemRecipeData* recipe, RecipeInfo& info, std::string& outReason)
 		{
+			const std::string recipeName = recipe->GetName();
+
 			// Buildings without real recipes yet (Chemical Processor, Player, ...)
 			// ship a CR_PlaceholderCraftingRecipe - not something to list.
-			if (recipe->GetName().find("Placeholder") != std::string::npos)
+			if (recipeName.find("Placeholder") != std::string::npos)
+			{
+				outReason = "recipe asset name contains 'Placeholder'";
 				return false;
+			}
 
 			info.nativeRecipe     = static_cast<void*>(recipe);
 			info.buildTimeSeconds = recipe->BuildTime;
 
 			SDK::FAuSimpleItem outputItem;
 			try { outputItem = recipe->GetOutputItem(); }
-			catch (...) { return false; }
-
-			if (!outputItem.ItemDataBase || IsBlueprintItem(outputItem.ItemDataBase))
+			catch (...)
+			{
+				outReason = "exception calling GetOutputItem()";
 				return false;
+			}
+
+			if (!outputItem.ItemDataBase)
+			{
+				outReason = "output item is null";
+				return false;
+			}
+			if (IsBlueprintItem(outputItem.ItemDataBase))
+			{
+				outReason = "output item '" + outputItem.ItemDataBase->UniqueItemName.ToString() + "' is a BlueprintItem";
+				return false;
+			}
 
 			info.output = MakeItemRef(outputItem);
 			if (LooksBroken(info.output.displayName))
+			{
+				outReason = "output item '" + info.output.uniqueItemName + "' has a missing string table entry";
 				return false;
+			}
 
 			try
 			{
 				for (const SDK::FAuSimpleItem& resource : recipe->GetNeededResources())
 				{
 					if (IsBlueprintItem(resource.ItemDataBase))
+					{
+						LOG_TRACE("CodexRecipes: [recipe] %s - dropped input '%s' (BlueprintItem).",
+							recipeName.c_str(), resource.ItemDataBase->UniqueItemName.ToString().c_str());
 						continue;
+					}
 					RecipeItemRef inputRef = MakeItemRef(resource);
 					if (LooksBroken(inputRef.displayName))
+					{
+						LOG_TRACE("CodexRecipes: [recipe] %s - dropped input '%s' (missing string table entry).",
+							recipeName.c_str(), inputRef.uniqueItemName.c_str());
 						continue;
+					}
 					info.inputs.push_back(std::move(inputRef));
 				}
 			}
-			catch (...) {}
+			catch (...)
+			{
+				LOG_TRACE("CodexRecipes: [recipe] %s - exception reading needed resources; inputs may be incomplete.", recipeName.c_str());
+			}
 
 			info.displayName = SDK::UKismetTextLibrary::Conv_TextToString(recipe->DisplayText).ToString();
 			if (info.displayName.empty() || LooksBroken(info.displayName))
@@ -595,18 +672,29 @@ namespace CodexRecipes
 				for (const CraftingBuilding& entry : buildings)
 				{
 					ParsedBuilding pb;
+					std::string assetName;
 					try
 					{
-						ParseBuildingAssetName(entry.building->GetName(), pb.key, pb.tier);
+						assetName = entry.building->GetName();
+						ParseBuildingAssetName(assetName, pb.key, pb.tier);
 						pb.displayName = GetBuildingDisplayName(entry.building);
-						pb.recipes     = GatherRecipes(entry.collection, linked);
+						pb.recipes     = GatherRecipes(entry.collection, linked, assetName);
 					}
 					catch (...)
 					{
+						LOG_TRACE("CodexRecipes: [building] %s - FILTERED: exception while parsing name / gathering recipes.",
+							assetName.empty() ? "<unknown>" : assetName.c_str());
 						continue;
 					}
-					if (!pb.recipes.empty())
-						parsed.push_back(std::move(pb));
+					if (pb.recipes.empty())
+					{
+						LOG_TRACE("CodexRecipes: [building] %s ('%s') - FILTERED: collection %s has no recipes.",
+							assetName.c_str(), pb.displayName.c_str(), entry.collection->GetName().c_str());
+						continue;
+					}
+					LOG_TRACE("CodexRecipes: [building] %s ('%s') - key '%s', tier %d, %d recipe(s).",
+						assetName.c_str(), pb.displayName.c_str(), pb.key.c_str(), pb.tier, static_cast<int>(pb.recipes.size()));
+					parsed.push_back(std::move(pb));
 				}
 
 				std::unordered_map<std::string, std::string> tierOneNameByKey;
@@ -660,14 +748,20 @@ namespace CodexRecipes
 							if (it == recipeIndex.end())
 							{
 								RecipeInfo info;
+								std::string reason;
 								bool ok = false;
-								try { ok = BuildRecipeInfo(recipe, info); }
-								catch (...) { ok = false; }
+								try { ok = BuildRecipeInfo(recipe, info, reason); }
+								catch (...) { ok = false; reason = "exception while building recipe info"; }
 								if (!ok)
 								{
+									LOG_TRACE("CodexRecipes: [recipe] %s (in %s) - FILTERED: %s.",
+										recipe->GetName().c_str(), bt.label.c_str(), reason.c_str());
 									rejected.insert(recipe);
 									continue;
 								}
+								LOG_TRACE("CodexRecipes: [recipe] %s (in %s) - KEPT as '%s' -> %dx %s, %d input(s).",
+									recipe->GetName().c_str(), bt.label.c_str(), info.displayName.c_str(),
+									info.output.count, info.output.uniqueItemName.c_str(), static_cast<int>(info.inputs.size()));
 								it = recipeIndex.emplace(recipe, recipes.size()).first;
 								recipes.push_back(std::move(info));
 							}
