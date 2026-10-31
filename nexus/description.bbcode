@@ -1,0 +1,120 @@
+[size=6][b]Codex — Recipe Browser for StarRupture[/b][/size]
+
+An in-game recipe browser. Search any item, recipe or building, see what it is made from and what uses it, and pin recipes on screen while you play.
+
+[b]Client-side only[/b]
+
+[b]Open it:[/b] in a loaded save, press [b]N[/b] for the search box, or [b]Shift+N[/b] for the full Codex window. Both are rebindable on the ModLoader config page (F2). [b]Esc[/b] closes either.
+
+[quote][b]If you encounter issues or just have a question, please discuss this in our Discord which you can find on the [url=https://www.nexusmods.com/starrupture/mods/89]Modloaders Description Page[/url] here on Nexus.[/b][/quote]
+
+[line]
+
+[size=5][b]What It Does[/b][/size]
+
+Codex gives you the game's recipe database in game. Find how anything is crafted, follow the chain back to raw materials, and see what each building can make.
+
+[size=4][b]Search[/b][/size]
+
+Type an item, recipe or building name. Up to 10 recipes and 3 buildings are listed. Use [b]Up[/b] and [b]Down[/b] to pick a result (the top one is highlighted), then [b]Enter[/b] to open it, or click any row. The box opens centred; drag it anywhere and it opens there next time. ✦ Recipes that share a name, such as a tiered one, show the building that makes them.
+
+Type a sum such as [b]22 * 2 + 4[/b] and the box shows the answer instead. It handles + - * / and brackets.
+
+[img]https://staticdelivery.nexusmods.com/mods/8632/images/138/138-1783823344-1282210024.png[/img]
+
+[size=4][b]Recipe[/b][/size]
+
+[list]
+[*]Inputs and outputs side by side, each with icon, name, count and items per minute, plus the craft time.
+[*]Click an input to jump to the recipe that produces it.
+[*]Click an output to list every recipe that uses it, and pick one to open.
+[*]Click a building after [b]Made in[/b] to browse everything it makes.
+[/list]
+
+[size=4][b]Buildings[/b][/size]
+
+The Buildings tab lists every crafting building and the recipes it can make. A tiered building such as the Fabricator is one entry with a Tier tab for each tier. Click a recipe to open it. Shift+N opens on the last recipe you viewed, or on this tab if you have not picked one yet.
+
+[size=4][b]Pinned recipes[/b][/size]
+
+Pin a recipe with the Pin button, or right-click it in the Buildings tab. You can also right-click any item the Codex shows (a search result, a recipe's inputs and output, a recipe in the "used in" list) to pin the recipe that makes it, and right-click an ingredient inside a pinned window to pin its recipe too, so a whole production chain can be pinned step by step. Right-clicking an item whose recipe is already pinned does nothing. It works in the game's own menus too: in the recipe station, the company delivery panel or a machine's menu, hover an item until the game shows its tooltip and right-click to pin the recipe that makes it. It works for items a recipe makes, and not on inventory slots (your own or the one beside a machine), where right-click is the game's own; the key follows the GamePinKey you set. Hold [b]Ctrl[/b] and right-click the same tooltip to open the production planner for that item (the same page as the Planner button), with the same rules; it follows the GamePlannerKey you set; clear GamePlannerKey to turn it off. Pinned windows can also be clicked and dragged while a game screen shows the mouse cursor (a machine's menu, the recipe station, the corporation terminal, the inventory), so you can unpin or move them there. This needs a mod loader build that shares the mouse on those screens (the release after 1.22.1); on an older loader pins are editable only as before. Up to 8 stay on screen while you play and never block the game's own input. Pins either tile (a neat column, wrapping to the side with room, with a gap you set from 1 to 50 pixels) or cascade (title bars stacked), whichever you choose in the config. While the Codex ([b]Shift+N[/b]), the mod loader window (F2) or the Escape menu is open, drag any pin to where you want the stack; the whole group follows it, and the spot is remembered per arrangement. Pins always stay fully on screen at any resolution or font scale, and a saved spot is re-fitted when the screen size changes. Click a pin to bring it to the front. Set [b]PinGrouping[/b] to Ungrouped to move every pin on its own: dragging one never moves another, and a new pin appears where the arrangement would put it next to the last one (or the next free spot if that is taken). Switching to Ungrouped leaves the pins where they are; switching back snaps them under the first pin. The group stays centered along its edge (turn that off with [b]PinCentering[/b]) and re-centers when a pin is added or removed; with centering on, dragging any pin moves the group only toward or away from the edge. Changing the pin layout carries the pins over: Right and Left mirror each other, Top lines them up centered across the top, and pins glide to their new spot instead of jumping. Pins are saved when you pin or unpin one and come back, in the same order and at the same spots, the next time the game starts once a save has loaded (also after a RELOAD); they are saved for the game, not per save, and all eight are kept however long their names. A recipe the game no longer has is dropped. Clear in the config's Saved state row only resets positions and leaves the pins as they are. The X at the right end of a pin's title bar unpins it (shown while the Codex, the Escape menu or a game screen with the cursor is open).
+
+[size=4][b]Planner[/b][/size]
+
+The recipe tab and every pinned window (while the Codex, the Escape menu or a game screen with the cursor is open, like Open) have a [b]Planner[/b] button. It opens a production planner in your default browser, set to the recipe's output item. Choose which planner with [b]Planner[/b] on the ModLoader config page:
+
+[list]
+[*][b]StarRupture Planner[/b] (default) — opens with the item added.
+[*][b]starruptureplanner.com[/b] — opens its calculator for the item, or the item's own page for items its calculator has no recipe for.
+[*][b]starrupturecalc.com[/b] — opens its calculator for the item.
+[*][b]starrupture-planner.com[/b] — opens its planner page; it has no item link.
+[*][b]Custom[/b] — opens the address in [b]CustomUrlTemplate[/b]. Put [b]{item}[/b] (the StarRupture Planner's item id), [b]{name}[/b] (the item's display name) or [b]{game}[/b] (the game's internal item name) where the item goes.
+[/list]
+
+An item a planner does not list opens the planner without an item. Only http and https addresses are opened.
+
+[line]
+
+[size=5][b]Installation[/b][/size]
+
+[list=1]
+[*]Download the latest file from the [b]Files[/b] tab
+[*]Open the ZIP file
+[*]Copy the contents of the included Plugins folder into:
+[i]"StarRupture\Binaries\Win64\ModLoader\Plugins"[/i]
+[*]Launch the game once to generate the config file
+[*]Load a save and press [b]N[/b]
+[/list]
+
+Requires [url=https://www.nexusmods.com/starrupture/mods/89]AlienX's Mod Loader[/url], the next release after v1.22.x (plugin interface v71 or newer). On an older loader the plugin shows "Needs loader" and stays off.
+
+[line]
+
+[size=5][b]Configuration[/b][/size]
+
+Config file:
+[i]"Plugins\config\Codex.ini"[/i]
+
+[img]https://raw.githubusercontent.com/{{REPO}}/{{TAG}}/images/config-tab.png[/img]
+
+[list]
+[*]Enabled — turn the plugin on or off (default: true)
+[*]SearchKey — key that opens the search box (default: N)
+[*]CodexKey — key that opens and closes the full Codex window (default: Shift+N)
+[*]GamePinKey — key that pins the item in the game's open item tooltip (default: RightMouseButton)
+[*]GamePlannerKey — key that opens the planner for the item in the game's open item tooltip (default: Ctrl+RightMouseButton)
+[*]Planner — which planner the Planner button opens (default: StarRupture Planner), a dropdown
+[*]CustomUrlTemplate — address used when Planner is Custom; [b]{item}[/b], [b]{name}[/b] and [b]{game}[/b] stand for the item
+[*]PinLayout — screen edge pins start from: Right (default), Left or Top, a dropdown
+[*]PinArrangement — Tile (default) or Cascade, a dropdown
+[*]PinGrouping — Grouped (default) or Ungrouped, a dropdown
+[*]PinSpacing — gap between tiled pins, 1 to 50 pixels (default: 6)
+[*]PinCentering — keep the pins centered along their edge (default: true)
+[/list]
+
+The keys can be changed on the ModLoader config page (F2), where the choices above are dropdowns. The page's [b]Saved state[/b] row has a [b]Clear[/b] button that puts the search box back in the centre and the pins back on their edge; your pinned recipes are kept.
+
+[line]
+
+[size=5][b]Troubleshooting[/b][/size]
+
+[list]
+[*][b]Nothing opens[/b] — the keys only work in a loaded save. Check that Enabled is on and that your keybinds are set on the ModLoader config page
+[*][b]No recipes or buildings listed[/b] — the recipe list is read once a save has finished loading
+[*][b]Plugin not loading[/b] — check [i]"ModLoader.log in Binaries\Win64\ModLoader\Logs\"[/i]
+[*][b]Issues after a game update[/b] — some features may require a plugin update after major game patches
+[/list]
+
+[line]
+
+[size=5][b]Disclaimer[/b][/size]
+
+Use at your own risk. The authors are not responsible for any damage caused by using this software.
+
+[line]
+
+[size=5][b]Credits[/b][/size]
+
+Original mod by [url=https://github.com/AlienXAXS]@AlienXAXS[/url]
+
+✦ [url=https://github.com/msantoro12]@msantoro12[/url] (maintainer), creator of [url=https://starrupture.goodstuff.software]StarRupture Planner[/url]
