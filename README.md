@@ -132,3 +132,9 @@ them as plain text fields.
 5. Drop it into `Binaries\Win64\Plugins\` alongside `dwmapi.dll` and launch the game
 
 See [PluginDevelopment.md](PluginDevelopment.md) for the full plugin API reference.
+
+## Credits
+
+Original mod by [@AlienXAXS](https://github.com/AlienXAXS).
+
+Maintained by [@msantoro12](https://github.com/msantoro12).
