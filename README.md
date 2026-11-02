@@ -89,6 +89,9 @@ loader the plugin shows "Needs loader" and stays off.
 ## Configuration
 
 Settings are written to the plugin's config file on first run and can be edited there.
+
+<img src="images/config-tab.png" width="480" alt="The mod loader's Config tab with Codex selected: dropdowns for the pin settings, the Saved state row and the Planner dropdown">
+
 On the mod loader's config page, `Planner`, `PinLayout`, `PinArrangement` and `PinGrouping` are dropdowns. The search
 box and pin positions have no field: the **Saved state** row at the end of the `Menu`
 section has a **Clear** button that puts the search box back in the centre and the pins back
