@@ -1,34 +1,6 @@
-Search box: Up/Down (hold to repeat) pick a result, Enter opens it, the top result is the default
-Search box opens centred and can be dragged (the move cursor shows where); it reopens where you left it
-New option PinLayout: pinned recipes start at the right, left or top edge
-New option PinArrangement: pins tile under the first one (default) or cascade one title bar apart
-New option PinSpacing: space between tiled pins (the config page slider, 1 to 50 screen pixels, default 6); it replaces the old on/off PinGap, which is no longer read
-Drag any pin while the Codex, the mod loader overlay (F2), the Escape menu or a game screen with the cursor is open and the whole group follows; the move cursor shows where it can be grabbed while the Codex or the overlay is open
-Where the group is dropped is remembered for Tile and Cascade separately and kept between sessions (new options PinTileOffset, PinCascadeOffset)
-Arrange pins button on the recipe window forgets the dropped spot for the current arrangement and puts the pins back on the edge
-Pinned windows have a Planner button, same as the recipe tab (shown while the Codex, the Escape menu or a game screen with the cursor is open, like Open)
-Needs a mod loader with plugin interface v71; on an older loader Codex shows "Needs loader" and stays off
-The recipe window's redundant Close button is gone (use the X or Esc)
-Planner opens the StarRupture Planner's add-item link, adding the recipe's output at one machine's output
-Planner can open starruptureplanner.com or starrupturecalc.com at the item, or the starrupture-planner.com planner page (option Planner)
-starruptureplanner.com opens the item's own page for items its calculator cannot target; starrupturecalc.com now covers eight more items (Aerogel, Basic Fuel, Epoxy, Goethite Powder, Organic Compound, Plastic, Reinforced Frame, Reinforced Housing)
-CustomUrlTemplate also takes {name} (the item's display name) and {game} (the game's internal item name) next to {item}
-PinLayout, Planner and PinArrangement are now dropdowns on the mod loader's config page
-The search box and pin positions are no longer config fields; a Saved state row with a Clear button puts them back at once
-Pins stay fully on screen at any resolution or font scale: tiles wrap to the side with room, a cascade takes shorter steps near the bottom, and a saved first-pin spot is kept on screen when the screen size changes
-Pins follow the first one with no lag while it is dragged, and cascaded pins keep their title bars in pin order
-Clicking a pinned recipe brings it to the front; its spot never changes
-New option PinGrouping: Grouped (default) keeps the pins together under the first one, and dragging any pin moves the whole group; Ungrouped lets you move every pin on its own, and dragging one never moves another
-Ungrouped, a new pin appears where the arrangement would put it next to the last pin when that spot is free and on screen, else at the next free spot, else at the default spot
-Ungrouped spots are saved (new option PinFreeOffsets): the first pin comes back where the first one was left, and all of them are re-fitted when the screen size changes; Clear and Arrange pins put the pins where they would go if just pinned
-Switching to Ungrouped leaves every pin where it is; switching back to Grouped puts the rest back under the first pin
-New option PinCentering (default on): the pinned recipes sit in the middle of their edge, across the top or down the left or right side, and re-center when a pin is added or removed
-With PinCentering on, dragging any pin moves the group only toward or away from the edge; Clear and Arrange pins put the group back on the edge, centered. Off, drag it anywhere
-Ungrouped pins are centered when placed (a new pin, a layout switch, Arrange pins) and a pin you dragged yourself never moves; after a restart saved spots count as placed by hand until Arrange pins
-Changing PinLayout carries the pins over: Right and Left mirror each other at the same height and distance from the edge, Top lines them up centered across the top, and leaving Top puts them at the new edge's default spot (centered along it when PinCentering is on)
-Pins that move on their own (a pin added or removed, a layout switch, Clear, Arrange pins) glide to their new spot in about a fifth of a second; a pin being dragged does not
-Pinned recipes are saved and come back at the next start, in the same order and at the same spots (new options PinnedRecipe1 to PinnedRecipe8, one per pin so no name is ever cut off; saved for the game and not per save); a recipe the game no longer has is dropped, and Clear leaves them alone (it only resets positions)
-Right-click an item to pin the recipe that makes it: search results, a recipe window's inputs and output, the "used in" list, and the ingredients in a pinned window (while the Codex, the mod loader overlay or the Escape menu is open). An item whose recipe is already pinned is not pinned again
-Pin from the game's own menus (recipe station, company delivery panel, machine menus): with the game's item tooltip open, right-click pins the recipe that makes that item (new option GamePinKey; it does nothing on an inventory slot's tooltip, where right-click is the game's own)
-Ctrl+right-click on the game's item tooltip opens the production planner for that item, the same page as the Planner button (new option GamePlannerKey, empty turns it off), with the same rules as the pin: only items a recipe makes, and not on inventory slots
-Pinned windows can be clicked and dragged while a game screen shows the cursor (machine menus, the recipe station, the corporation terminal, the inventory), not only with the Codex or the Escape menu open; needs the mod loader build that shares the mouse on those screens (the release after 1.22.1); on an older loader the pins are editable only as before
+- Right-click an item to pin the recipe that makes it
+- Pinned recipes are saved and come back next time you play
+- Pins can be tiled or cascaded from any screen edge, dragged around, and stay on screen at any resolution
+- Search with the Up and Down keys and Enter, and drag the search box where you like
+- Planner button opens the item in the StarRupture Planner
+- Needs the latest StarRupture Mod Loader
