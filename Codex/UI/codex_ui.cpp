@@ -1723,7 +1723,7 @@ namespace CodexUI
 		// old value.
 		void LoadSavedPins()
 		{
-			char collapsed[kPinsBufferSize];
+			char collapsed[kPinsBufferSize] = "";
 			CodexConfig::Config::GetPinCollapsed(collapsed, sizeof(collapsed));
 			g_savedCollapsed = collapsed;
 
@@ -2217,14 +2217,11 @@ namespace CodexUI
 			snprintf(g_pins[index].title, sizeof(g_pins[index].title), "%s###CodexPin%d", displayName, index);
 		}
 
-		// ImGui's ImGuiCond_Always: the window is held to the height asked for.
-		constexpr int kSizeAlways = 1;
-
 		// A pin collapses by easing its window's height down to the title bar, the
 		// content clipped by the window; open, the window sizes itself to its
-		// content as before. (Collapsed, ImGui keeps a window at least its
-		// WindowMinSize tall, a few pixels more than the bar.) The height is asked
-		// for here and applied by the window's next Begin.
+		// content as before. A height asked for overrides the window's auto-fit on
+		// that axis only, so its width still sizes itself. The height is asked for
+		// here and applied by the window's next Begin.
 		void SizeForCollapse(IModLoaderImGui* imgui, PinSlot& slot)
 		{
 			slot.sizedFixed = slot.collapsed || slot.collapseT < 1.0f;
@@ -2240,7 +2237,7 @@ namespace CodexUI
 			const float ease = slot.collapseT * slot.collapseT * (3.0f - 2.0f * slot.collapseT);
 			slot.hints.width = 0.0f; // sizes itself to its content
 			slot.hints.height = bar + ((std::max)(slot.fullH, bar) - bar) * ease;
-			slot.hints.size_cond = kSizeAlways;
+			slot.hints.size_cond = PluginCond_Always;
 		}
 
 		// Called from the pin's own render, once a frame: measures the whole card
@@ -2674,6 +2671,11 @@ namespace CodexUI
 		{
 			if (clicks.collapse)
 			{
+				// The press that hit the button is not the start of a drag of the card.
+				for (PinSlot& pin : g_pins)
+					pin.dragging = false;
+				g_pinGrab.pending = false;
+
 				const bool collapse = ctrl ? !AllPinsCollapsed() : !g_pins[index].collapsed;
 				const int count = PinCount();
 				for (int k = 0; k < count; ++k)
@@ -2741,7 +2743,7 @@ namespace CodexUI
 			// follower. Ungrouped: every pin is dragged on its own.
 			const bool follower = !g_pinSettings.free && index != 0;
 			StepCollapse(imgui, slot, winH);
-			int windowFlags = slot.sizedFixed ? (kPinWindowFlags & ~PluginWindowFlags_AlwaysAutoResize) | PluginWindowFlags_NoScrollbar : kPinWindowFlags;
+			int windowFlags = slot.sizedFixed ? kPinWindowFlags | PluginWindowFlags_NoScrollbar : kPinWindowFlags;
 			if (follower)
 				windowFlags |= PluginWindowFlags_NoMove;
 			slot.hints.extra_window_flags = windowFlags;
