@@ -1153,12 +1153,14 @@ int main()
 		printf("  %d states checked\n", states);
 
 		const float arrowH = 30.0f;
+		const float screenW = 1920.0f;
+		const float screenH = 1080.0f;
 
 		// One pin: above it, on its right edge, the arrow's bottom-right corner there.
 		{
 			const Point at[] = { { 400, 200 } };
 			const Size sizes[] = { { 280, 150 } };
-			const ArrowSpot spot = PinLayerArrowSpot(at, sizes, 1, arrowH);
+			const ArrowSpot spot = PinLayerArrowSpot(at, sizes, 1, arrowH, screenW, screenH);
 			Check(spot.at.x == 680 && spot.at.y == 200 && spot.pivotY == 1.0f, "one pin: above its right edge", "one");
 		}
 
@@ -1166,7 +1168,7 @@ int main()
 		{
 			const Point at[] = { { 900, 300 }, { 900, 460 }, { 100, 120 }, { 500, 120 } };
 			const Size sizes[] = { { 280, 150 }, { 300, 120 }, { 260, 190 }, { 320, 110 } };
-			const ArrowSpot spot = PinLayerArrowSpot(at, sizes, 4, arrowH);
+			const ArrowSpot spot = PinLayerArrowSpot(at, sizes, 4, arrowH, screenW, screenH);
 			Check(spot.at.x == 360 && spot.at.y == 120 && spot.pivotY == 1.0f, "the topmost pin is followed, the first on a tie", "topmost");
 		}
 
@@ -1175,8 +1177,8 @@ int main()
 			const Point column[] = { { 1600, 100 }, { 1600, 256 }, { 1600, 382 } };
 			const Point cascade[] = { { 1500, 100 }, { 1520, 130 }, { 1540, 160 } };
 			const Size sizes[] = { { 280, 150 }, { 280, 120 }, { 280, 190 } };
-			const ArrowSpot a = PinLayerArrowSpot(column, sizes, 3, arrowH);
-			const ArrowSpot b = PinLayerArrowSpot(cascade, sizes, 3, arrowH);
+			const ArrowSpot a = PinLayerArrowSpot(column, sizes, 3, arrowH, screenW, screenH);
+			const ArrowSpot b = PinLayerArrowSpot(cascade, sizes, 3, arrowH, screenW, screenH);
 			Check(a.at.x == 1880 && a.at.y == 100, "a column: above the lead", "column");
 			Check(b.at.x == 1780 && b.at.y == 100, "a cascade: above the first", "cascade");
 		}
@@ -1186,8 +1188,8 @@ int main()
 			const Point exact[] = { { 400, arrowH } };
 			const Point tight[] = { { 400, arrowH - 1.0f } };
 			const Size sizes[] = { { 280, 150 } };
-			Check(PinLayerArrowSpot(exact, sizes, 1, arrowH).pivotY == 1.0f, "room for the arrow: above", "exact");
-			const ArrowSpot spot = PinLayerArrowSpot(tight, sizes, 1, arrowH);
+			Check(PinLayerArrowSpot(exact, sizes, 1, arrowH, screenW, screenH).pivotY == 1.0f, "room for the arrow: above", "exact");
+			const ArrowSpot spot = PinLayerArrowSpot(tight, sizes, 1, arrowH, screenW, screenH);
 			Check(spot.pivotY == 0.0f && spot.at.x == 680 && spot.at.y == arrowH - 1.0f + 150.0f,
 				"no room above: under the pin, on its right edge", "tight");
 		}
@@ -1196,8 +1198,36 @@ int main()
 		{
 			const Point at[] = { { 10, 0 }, { 400, 20 }, { 800, 10 } };
 			const Size sizes[] = { { 100, 100 }, { 200, 300 }, { 150, 120 } };
-			const ArrowSpot spot = PinLayerArrowSpot(at, sizes, 3, arrowH);
+			const ArrowSpot spot = PinLayerArrowSpot(at, sizes, 3, arrowH, screenW, screenH);
 			Check(spot.pivotY == 0.0f && spot.at.x == 600 && spot.at.y == 320, "under the lowest pin", "lowest");
+		}
+
+		// Room above and below both short: the top pin at the screen top and the lowest at the
+		// screen bottom. The arrow stays on screen, at the screen's top edge on the top pin's right edge.
+		{
+			const Point at[] = { { 400, 0 }, { 900, screenH - 200.0f } };
+			const Size sizes[] = { { 280, 150 }, { 300, 200 } };
+			const ArrowSpot spot = PinLayerArrowSpot(at, sizes, 2, arrowH, screenW, screenH);
+			Check(spot.pivotY == 1.0f && spot.at.x == 680 && spot.at.y == arrowH,
+				"no room above or below: at the screen top on the top pin's right edge", "both short");
+		}
+
+		// Room below by exactly the arrow's height: still under; a pixel short: the screen top.
+		{
+			const Point fits[] = { { 400, 0 } };
+			const Size sizes[] = { { 280, screenH - arrowH } };
+			const Size taller[] = { { 280, screenH - arrowH + 1.0f } };
+			Check(PinLayerArrowSpot(fits, sizes, 1, arrowH, screenW, screenH).pivotY == 0.0f, "room below exactly: under the pin", "below exact");
+			const ArrowSpot spot = PinLayerArrowSpot(fits, taller, 1, arrowH, screenW, screenH);
+			Check(spot.pivotY == 1.0f && spot.at.y == arrowH, "a pixel short below: the screen top", "below tight");
+		}
+
+		// A pin whose right edge passes the screen's: the arrow's right edge stops at the screen's.
+		{
+			const Point at[] = { { 1800, 200 } };
+			const Size sizes[] = { { 280, 150 } };
+			const ArrowSpot spot = PinLayerArrowSpot(at, sizes, 1, arrowH, screenW, screenH);
+			Check(spot.at.x == screenW && spot.at.y == 200, "a pin past the right edge: the arrow stays on screen", "right edge");
 		}
 
 		// The arrow is never over a pin's title bar when there is room above.
@@ -1215,19 +1245,29 @@ int main()
 					at[k] = { next() * 1.5f, next() };
 					sizes[k] = { 100.0f + next() * 0.3f, 60.0f + next() * 0.3f };
 				}
-				const ArrowSpot spot = PinLayerArrowSpot(at, sizes, count, arrowH);
-				// The arrow sits wholly above every pin's top edge, or wholly below every pin's bottom edge.
-				bool clear = true;
+				const ArrowSpot spot = PinLayerArrowSpot(at, sizes, count, arrowH, screenW, screenH);
+				// The arrow sits wholly above every pin's top edge, or wholly below every pin's bottom edge,
+				// unless neither fits on screen.
+				float lowest = 0.0f;
+				float highest = at[0].y;
 				for (int k = 0; k < count; ++k)
+				{
+					lowest = std::max(lowest, at[k].y + sizes[k].h);
+					highest = std::min(highest, at[k].y);
+				}
+				const bool fits = highest >= arrowH || lowest + arrowH <= screenH;
+				bool clear = true;
+				for (int k = 0; k < count && fits; ++k)
 				{
 					if (spot.pivotY == 1.0f)
 						clear = clear && spot.at.y <= at[k].y;
 					else
 						clear = clear && spot.at.y >= at[k].y + sizes[k].h;
 				}
-				// Above, it also stays on screen.
-				clear = clear && (spot.pivotY != 1.0f || spot.at.y - arrowH >= 0.0f);
 				Check(clear, "the arrow is wholly above the top pin or under the lowest", "round " + std::to_string(round));
+				const float arrowTop = spot.at.y - spot.pivotY * arrowH;
+				Check(arrowTop >= 0.0f && arrowTop + arrowH <= screenH && spot.at.x <= screenW,
+					"the arrow is on screen", "round " + std::to_string(round));
 				++checked;
 			}
 			printf("  %d random layouts checked\n", checked);

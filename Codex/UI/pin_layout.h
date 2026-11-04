@@ -517,14 +517,16 @@ namespace CodexPinLayout
 	// they are arranged. `at` and `sizes` are the `count` pins that are up, count
 	// at least 1. With no room above the top pin for a window `arrowH` high it
 	// goes under the lowest pin instead, on that pin's right edge, rather than
-	// over a title bar.
+	// over a title bar. With no room there either, within `screenH`, it sits at
+	// the top edge of the screen on the top pin's right edge. The right edge
+	// never passes `screenW`, so the arrow is always on screen.
 	struct ArrowSpot
 	{
 		Point at;
 		float pivotY;
 	};
 
-	inline ArrowSpot PinLayerArrowSpot(const Point* at, const Size* sizes, int count, float arrowH)
+	inline ArrowSpot PinLayerArrowSpot(const Point* at, const Size* sizes, int count, float arrowH, float screenW, float screenH)
 	{
 		int top = 0;
 		int bottom = 0;
@@ -536,8 +538,12 @@ namespace CodexPinLayout
 				bottom = k;
 		}
 
+		const float topX = std::min(at[top].x + sizes[top].w, screenW);
 		if (at[top].y >= arrowH)
-			return { { at[top].x + sizes[top].w, at[top].y }, 1.0f };
-		return { { at[bottom].x + sizes[bottom].w, at[bottom].y + sizes[bottom].h }, 0.0f };
+			return { { topX, at[top].y }, 1.0f };
+		const float bottomY = at[bottom].y + sizes[bottom].h;
+		if (bottomY + arrowH <= screenH)
+			return { { std::min(at[bottom].x + sizes[bottom].w, screenW), bottomY }, 0.0f };
+		return { { topX, arrowH }, 1.0f };
 	}
 }

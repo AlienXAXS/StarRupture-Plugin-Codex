@@ -2963,6 +2963,8 @@ namespace CodexUI
 		{
 			float winW = 0.0f, winH = 0.0f;
 			imgui->GetWindowSize(&winW, &winH);
+			float screenW = 0.0f, screenH = 0.0f;
+			imgui->GetDisplaySize(&screenW, &screenH);
 
 			CodexPinLayout::Point at[kMaxPins];
 			CodexPinLayout::Size sizes[kMaxPins];
@@ -2978,7 +2980,7 @@ namespace CodexUI
 			}
 			if (count > 0)
 			{
-				const CodexPinLayout::ArrowSpot spot = CodexPinLayout::PinLayerArrowSpot(at, sizes, count, winH);
+				const CodexPinLayout::ArrowSpot spot = CodexPinLayout::PinLayerArrowSpot(at, sizes, count, winH, screenW, screenH);
 				g_layerHints.pos_x = spot.at.x;
 				g_layerHints.pos_y = spot.at.y;
 				g_layerHints.pivot_y = spot.pivotY;
