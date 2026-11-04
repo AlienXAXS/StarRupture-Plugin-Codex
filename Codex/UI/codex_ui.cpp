@@ -1354,6 +1354,10 @@ namespace CodexUI
 		constexpr int kPinWindowFlags = PluginWindowFlags_AlwaysAutoResize | PluginWindowFlags_NoSavedSettings |
 			PluginWindowFlags_PauseMenuMouseInputs;
 
+		// A card held at a fixed height shows no scrollbar and ignores the mouse
+		// wheel (ImGuiWindowFlags_NoScrollWithMouse, which the SDK has no name for).
+		constexpr int kPinHeldFlags = PluginWindowFlags_NoScrollbar | (1 << 4);
+
 		// Set when the lead pin has to be put back at its anchor: the layout
 		// was changed in the config, the old lead was unpinned, the screen
 		// size changed, or the player asked for Arrange pins.
@@ -2403,7 +2407,7 @@ namespace CodexUI
 		// the slots stay in the order the recipes were pinned and the first is
 		// always the lead. The next pin along becomes the lead and takes the
 		// anchor.
-		void UnpinSlot(int index)
+		void UnpinSlot(int index, bool persist = true)
 		{
 			const int count = PinCount();
 			if (index >= count)
@@ -2455,7 +2459,8 @@ namespace CodexUI
 			{
 				// The first pin's spot stays: the next first pin comes back to it.
 				g_pinSettings.freeAnchors[count - 1] = PinAnchor{};
-				CommitPinFreeAnchors();
+				if (persist)
+					CommitPinFreeAnchors();
 
 				// With centering on, the pins left that nobody placed by hand are
 				// placed again as a group.
@@ -2464,7 +2469,8 @@ namespace CodexUI
 			}
 			if (g_self && g_self->hooks->UI && last.widget)
 				g_self->hooks->UI->SetWidgetVisible(last.widget, false);
-			CommitPinnedRecipes();
+			if (persist)
+				CommitPinnedRecipes();
 		}
 
 		// Follows a drag of a pin's window and, once, when a drag that moved it
@@ -2680,8 +2686,12 @@ namespace CodexUI
 				const int count = PinCount();
 				for (int k = 0; k < count; ++k)
 				{
-					if (ctrl || k == index)
-						g_pins[k].collapsed = collapse;
+					if (!ctrl && k != index)
+						continue;
+					g_pins[k].collapsed = collapse;
+					// Held from the next Begin on, so the wheel cannot scroll it while it shrinks.
+					if (collapse)
+						g_pins[k].hints.extra_window_flags |= kPinHeldFlags;
 				}
 				CommitPinnedRecipes();
 			}
@@ -2693,8 +2703,13 @@ namespace CodexUI
 				UnpinSlot(index);
 				return;
 			}
+			// One save for all of them, not one per pin.
+			const bool free = g_pinSettings.free;
 			for (int k = PinCount() - 1; k >= 0; --k)
-				UnpinSlot(k);
+				UnpinSlot(k, false);
+			if (free)
+				CommitPinFreeAnchors();
+			CommitPinnedRecipes();
 		}
 
 		// Pinned cards show their edit controls (the unpin X, Open and Planner)
@@ -2743,7 +2758,7 @@ namespace CodexUI
 			// follower. Ungrouped: every pin is dragged on its own.
 			const bool follower = !g_pinSettings.free && index != 0;
 			StepCollapse(imgui, slot, winH);
-			int windowFlags = slot.sizedFixed ? kPinWindowFlags | PluginWindowFlags_NoScrollbar : kPinWindowFlags;
+			int windowFlags = slot.sizedFixed ? kPinWindowFlags | kPinHeldFlags : kPinWindowFlags;
 			if (follower)
 				windowFlags |= PluginWindowFlags_NoMove;
 			slot.hints.extra_window_flags = windowFlags;
