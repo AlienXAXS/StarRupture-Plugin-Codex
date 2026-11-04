@@ -2679,40 +2679,28 @@ namespace CodexUI
 
 		// The title buttons' glyphs, from the loader's Material Icons font (see its
 		// MaterialIcons.md for the codepoints).
-		//
-		// Where a glyph's ink sits is not where its text line is. The icon font is
-		// merged with its baseline on the text font's, and its glyphs fill a
-		// one-em box above that baseline, while the line (FontSize high) holds the
-		// ascent above the baseline and the descent below it. So a glyph centred by
-		// its line sits high, and one whose ink hugs the bottom of its em box (the
-		// minimize bar) sits lower than the others. DrawIconCentred puts a glyph's
-		// ink on a given centre instead.
-		struct IconInk
-		{
-			float lo; // lowest point of the ink above the baseline, in 1/512 em
-			float hi; // highest point
-		};
-		constexpr float kIconEm = 512.0f;
-		// The share of a text line above the baseline, ascent / (ascent + descent):
-		// about 0.8 for the loader's text fonts (Arial 0.81, Malgun Gothic 0.82, YaHei 0.80).
-		constexpr float kLineAscentShare = 0.8f;
+		constexpr const char* kIconClose    = "î"; // U+E5CD close
+		constexpr const char* kIconCollapse = "î¤±"; // U+E931 minimize
+		constexpr const char* kIconExpand   = "î"; // U+E5CF expand_more
 
-		constexpr const char* kIconClose    = "\xEE\x97\x8D"; // U+E5CD close
-		constexpr IconInk     kInkClose     = { 107.0f, 405.0f };
-		constexpr const char* kIconCollapse = "\xEE\xA4\xB1"; // U+E931 minimize
-		constexpr IconInk     kInkCollapse  = { 64.0f, 107.0f };
-		constexpr const char* kIconExpand   = "\xEE\x97\x8F"; // U+E5CF expand_more
-		constexpr IconInk     kInkExpand    = { 171.0f, 329.0f };
-
-		// Draws an icon with the middle of its ink on (cx, cy). The icons' ink is
-		// centred across the em box, so across it the advance's middle is the ink's.
-		void DrawIconCentred(IModLoaderImGui* imgui, PluginDrawList dl, const char* icon, const IconInk& ink, float cx, float cy)
+		// Draws an icon with its em box centred on (cx, cy), moved down by the same
+		// shift the loader's icon GlyphOffset gives it: the icon font is merged on
+		// the text font's baseline, and the offset puts its em box where the text
+		// line's middle is. This goes away once the loader applies it. The shift is
+		// 4.5/13 of the font size for the default font (monospace, whose "i" and "W"
+		// are as wide) and 2.5/15 for a TTF family. Across it the advance's middle
+		// is the ink's.
+		void DrawIconCentred(IModLoaderImGui* imgui, PluginDrawList dl, const char* icon, float cx, float cy)
 		{
+			float narrowW = 0.0f, wideW = 0.0f, lineH = 0.0f;
+			imgui->CalcTextSize("i", &narrowW, &lineH, false, -1.0f);
+			imgui->CalcTextSize("W", &wideW, &lineH, false, -1.0f);
+			const float size = imgui->GetFontSize();
+			const bool monospace = narrowW == wideW;
+			const float shift = std::floor(size * (monospace ? 4.5f / 13.0f : 2.5f / 15.0f) + 0.5f);
 			float iconW = 0.0f, iconH = 0.0f;
 			imgui->CalcTextSize(icon, &iconW, &iconH, false, -1.0f);
-			const float baseline = iconH * kLineAscentShare;
-			const float inkMid = (ink.lo + ink.hi) * 0.5f / kIconEm * iconH;
-			imgui->DL_AddText(dl, cx - iconW * 0.5f, cy - baseline + inkMid, imgui->GetColorU32FromCol(kColText, 1.0f), icon);
+			imgui->DL_AddText(dl, cx - iconW * 0.5f, cy - size * 0.5f + shift, imgui->GetColorU32FromCol(kColText, 1.0f), icon);
 		}
 
 		enum class TitleGlyph { Close, Collapse, Expand };
@@ -2736,9 +2724,7 @@ namespace CodexUI
 					imgui->GetColorU32FromCol(held ? kColButtonActive : kColButtonHovered, 1.0f), 0.0f, 0);
 			const char* icon = glyph == TitleGlyph::Close ? kIconClose
 				: glyph == TitleGlyph::Collapse ? kIconCollapse : kIconExpand;
-			const IconInk& ink = glyph == TitleGlyph::Close ? kInkClose
-				: glyph == TitleGlyph::Collapse ? kInkCollapse : kInkExpand;
-			DrawIconCentred(imgui, dl, icon, ink, (box.minX + box.maxX) * 0.5f, (box.minY + box.maxY) * 0.5f);
+			DrawIconCentred(imgui, dl, icon, (box.minX + box.maxX) * 0.5f, (box.minY + box.maxY) * 0.5f);
 			if (hovered)
 				imgui->SetTooltip(tooltip);
 			return clicked;
@@ -3053,7 +3039,6 @@ namespace CodexUI
 		// The arrow's glyphs, from the loader's Material Icons font.
 		constexpr const char* kIconTuck   = "\xEE\xAB\x8F"; // U+EACF keyboard_double_arrow_up: the pins are out, a click tucks them in
 		constexpr const char* kIconUntuck = "\xEE\xAB\x90"; // U+EAD0 keyboard_double_arrow_down: the pins are tucked, a click brings them out
-		constexpr IconInk     kInkTuck    = { 107.0f, 405.0f }; // both
 
 		// How far the arrow's window sits from the pin it is beside, less than the
 		// theme's ItemSpacing: the window's own padding (WindowPadding) is between
@@ -3137,8 +3122,7 @@ namespace CodexUI
 				g_layerHints.pivot_y = spot.pivotY;
 			}
 
-			// A button of its own size with the icon drawn over it, so the glyph is
-			// centred by its ink.
+			// A button of its own size with the icon drawn over it, centred.
 			const float frameH = imgui->GetFrameHeight();
 			const bool clicked = imgui->ButtonSized("###CodexPinLayerArrow", frameH, frameH);
 			float minX = 0.0f, minY = 0.0f, maxX = 0.0f, maxY = 0.0f;
@@ -3148,7 +3132,7 @@ namespace CodexUI
 			if (clicked)
 				g_pinsTucked.store(!g_pinsTucked.load(std::memory_order_relaxed), std::memory_order_relaxed);
 			const bool tucked = g_pinsTucked.load(std::memory_order_relaxed);
-			DrawIconCentred(imgui, imgui->GetWindowDrawList(), tucked ? kIconUntuck : kIconTuck, kInkTuck,
+			DrawIconCentred(imgui, imgui->GetWindowDrawList(), tucked ? kIconUntuck : kIconTuck,
 				(minX + maxX) * 0.5f, (minY + maxY) * 0.5f);
 			// The cursor is now one ItemSpacing below the button.
 			float afterX = 0.0f, afterY = 0.0f;
