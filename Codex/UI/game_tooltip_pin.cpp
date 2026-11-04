@@ -250,10 +250,20 @@ namespace CodexTooltipPin
 		bool g_hintsOn = false;                // Menu.GameTooltipHints, read once at Init
 		std::atomic<uint64_t> g_uiState{ 0 }; // the loader's UI state, for the render thread
 
-		// Game thread, from the loader's tick, when a bit in kSubscribedMask changes.
+		std::atomic<bool> g_watchingMenus{ false };
+		IPluginGameMenu* g_gameMenu = nullptr;
+
+		// Game thread, from the loader's tick, when a bit Codex follows changes.
 		void OnUIStateChanged(uint64_t /*oldState*/, uint64_t newState, void* /*userData*/)
 		{
 			g_uiState.store(newState, std::memory_order_relaxed);
+		}
+
+		// The same, for the menu-layer bits: a second registration, so it can come and go
+		// on its own (the same callback and userData twice would be ignored).
+		void OnMenuStateChanged(uint64_t oldState, uint64_t newState, void* userData)
+		{
+			OnUIStateChanged(oldState, newState, userData);
 		}
 
 		void HintProblem(const std::string& what)
@@ -624,13 +634,29 @@ namespace CodexTooltipPin
 		return g_uiState.load(std::memory_order_relaxed);
 	}
 
+	void WatchPinMenus(bool on)
+	{
+		if (!g_gameMenu || g_watchingMenus.exchange(on) == on)
+			return;
+		if (on)
+			g_gameMenu->RegisterOnUIStateChanged(kPinLayerMenus, &OnMenuStateChanged, nullptr);
+		else
+		{
+			g_gameMenu->UnregisterOnUIStateChanged(&OnMenuStateChanged, nullptr);
+			// The loader stops reading these bits; drop the ones only it set, so a
+			// later watch does not start from a stale value.
+			g_uiState.fetch_and(~(kPinLayerMenus & ~kUIStateMask), std::memory_order_relaxed);
+		}
+	}
+
 	void Init(IPluginSelf* self)
 	{
 		if (!self->hooks->Input || !self->hooks->UI)
 			return;
 
-		if (self->hooks->GameMenu)
-			self->hooks->GameMenu->RegisterOnUIStateChanged(kSubscribedMask, &OnUIStateChanged, nullptr);
+		g_gameMenu = self->hooks->GameMenu;
+		if (g_gameMenu)
+			g_gameMenu->RegisterOnUIStateChanged(kUIStateMask, &OnUIStateChanged, nullptr);
 
 		g_hintsOn = CodexConfig::Config::GetGameTooltipHints();
 
@@ -706,7 +732,12 @@ namespace CodexTooltipPin
 		if (self && self->hooks->Input && self->hooks->UI)
 		{
 			if (self->hooks->GameMenu)
+			{
 				self->hooks->GameMenu->UnregisterOnUIStateChanged(&OnUIStateChanged, nullptr);
+				self->hooks->GameMenu->UnregisterOnUIStateChanged(&OnMenuStateChanged, nullptr);
+			}
+			g_watchingMenus.store(false);
+			g_gameMenu = nullptr;
 			self->hooks->Input->UnregisterKeybindByName(CodexConfig::Config::GetGamePinKey(), EModKeyEvent::Pressed, &OnPinKeyPressed);
 			const std::string plannerKey = CodexConfig::Config::GetGamePlannerKey();
 			if (!plannerKey.empty())

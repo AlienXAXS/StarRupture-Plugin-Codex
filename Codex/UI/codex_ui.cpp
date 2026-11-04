@@ -155,6 +155,7 @@ namespace CodexUI
 		void PinRecipe(IModLoaderImGui* imgui, void* nativeRecipe, bool restoring = false);
 		void RestorePinnedRecipes(IModLoaderImGui* imgui);
 		void CommitPinnedRecipes();
+		void CommitPinCollapsed();
 		void ArrangePins(IModLoaderImGui* imgui);
 		bool IsPinned(void* nativeRecipe);
 		bool IsProductPinned(const std::string& uniqueItemName);
@@ -1745,8 +1746,15 @@ namespace CodexUI
 			g_savedPins = CodexPinSet::ToSlots(keys, kMaxPins);
 			for (int k = 0; k < kMaxPins; ++k)
 				CodexConfig::Config::SetPinnedRecipe(k, g_savedPins[k].c_str());
+			CommitPinCollapsed();
+		}
 
+		// Saves which pins are collapsed, in pin order. A collapse or expand changes
+		// only this, so it does not rewrite the recipe keys.
+		void CommitPinCollapsed()
+		{
 			g_savedCollapsed.clear();
+			const int count = PinCount();
 			for (int k = 0; k < count; ++k)
 				g_savedCollapsed += g_pins[k].collapsed ? '1' : '0';
 			CodexConfig::Config::SetPinCollapsed(g_savedCollapsed.c_str());
@@ -2463,6 +2471,11 @@ namespace CodexUI
 				g_pins[k].collapsed = g_pins[k + 1].collapsed;
 				g_pins[k].collapseT = g_pins[k + 1].collapseT;
 				g_pins[k].fullH = g_pins[k + 1].fullH;
+				g_pins[k].sizedFixed = g_pins[k + 1].sizedFixed;
+				g_pins[k].hints.width = g_pins[k + 1].hints.width;
+				g_pins[k].hints.height = g_pins[k + 1].hints.height;
+				g_pins[k].hints.size_cond = g_pins[k + 1].hints.size_cond;
+				g_pins[k].hints.extra_window_flags = g_pins[k + 1].hints.extra_window_flags;
 				g_pins[k].glide.active = false;
 				if (g_pinSettings.free)
 				{
@@ -2508,6 +2521,7 @@ namespace CodexUI
 				g_self->hooks->UI->SetWidgetVisible(last.widget, false);
 			if (count == 1)
 			{
+				CodexTooltipPin::WatchPinMenus(false);
 				g_pinsDropped = false;
 				SetPinLayerArrowShown(false);
 			}
@@ -2737,7 +2751,7 @@ namespace CodexUI
 					if (collapse)
 						g_pins[k].hints.extra_window_flags |= kPinHeldFlags;
 				}
-				CommitPinnedRecipes();
+				CommitPinCollapsed();
 			}
 
 			if (!clicks.close)
@@ -2776,7 +2790,9 @@ namespace CodexUI
 		// of its last game tick.
 		void UpdatePinLayer()
 		{
-			const bool menuUp = (CodexTooltipPin::UIState() & CodexTooltipPin::kPinLayerMenus) != 0;
+			// The loader reads the menu bits only while a pin is up.
+			CodexTooltipPin::WatchPinMenus(PinCount() > 0);
+			const bool menuUp = CodexTooltipPin::PinLayerMenuUp(CodexTooltipPin::UIState());
 			const CodexPinLayout::PinLayerState now = CodexPinLayout::PinLayerNow(
 				PinCount(), g_pinsBelow.load(std::memory_order_relaxed), menuUp, g_layerWidget != nullptr);
 
