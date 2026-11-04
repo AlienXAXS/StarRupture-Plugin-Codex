@@ -2240,7 +2240,14 @@ namespace CodexUI
 			const float bar = imgui->GetFrameHeight();
 			const float ease = slot.collapseT * slot.collapseT * (3.0f - 2.0f * slot.collapseT);
 			slot.hints.width = 0.0f; // sizes itself to its content
-			slot.hints.height = bar + ((std::max)(slot.fullH, bar) - bar) * ease;
+			// A window is never shorter than its title bar, so a collapsed card asks
+			// for less than that and ImGui keeps exactly the title bar. ImGui also
+			// draws a line under the title bar (FrameBorderSize); a height of our own
+			// estimate that came out taller put the window's bottom border below it,
+			// as a second line.
+			slot.hints.height = slot.collapsed && slot.collapseT <= 0.0f
+				? 1.0f
+				: bar + ((std::max)(slot.fullH, bar) - bar) * ease;
 			slot.hints.size_cond = PluginCond_Always;
 		}
 
@@ -2580,7 +2587,13 @@ namespace CodexUI
 			return { minX, minY, minX + size, minY + size };
 		}
 
-		enum class TitleGlyph { Close, Collapse };
+		// The title buttons' glyphs, from the loader's Material Icons font (see its
+		// MaterialIcons.md for the codepoints).
+		constexpr const char* kIconClose    = "î"; // U+E5CD close
+		constexpr const char* kIconCollapse = "î¤±"; // U+E931 minimize
+		constexpr const char* kIconExpand   = "î"; // U+E3C6 crop_square
+
+		enum class TitleGlyph { Close, Collapse, Expand };
 
 		// One button of a pinned window's title bar, hit-tested where it is drawn.
 		// True when it is clicked.
@@ -2604,17 +2617,11 @@ namespace CodexUI
 			if (hovered)
 				imgui->DL_AddCircleFilled(dl, cx, cy, size * 0.5f + 1.0f,
 					imgui->GetColorU32FromCol(clicked ? kColButtonActive : kColButtonHovered, 1.0f), 12);
-			const unsigned int col = imgui->GetColorU32FromCol(kColText, 1.0f);
-			const float r = size * 0.5f * 0.5f;
-			if (glyph == TitleGlyph::Close)
-			{
-				imgui->DL_AddLine(dl, cx - r, cy - r, cx + r, cy + r, col, 1.0f);
-				imgui->DL_AddLine(dl, cx - r, cy + r, cx + r, cy - r, col, 1.0f);
-			}
-			else
-			{
-				imgui->DL_AddLine(dl, cx - r, cy + r, cx + r, cy + r, col, 1.0f);
-			}
+			const char* icon = glyph == TitleGlyph::Close ? kIconClose
+				: glyph == TitleGlyph::Collapse ? kIconCollapse : kIconExpand;
+			float iconW = 0.0f, iconH = 0.0f;
+			imgui->CalcTextSize(icon, &iconW, &iconH, false, -1.0f);
+			imgui->DL_AddText(dl, cx - iconW * 0.5f, cy - iconH * 0.5f, imgui->GetColorU32FromCol(kColText, 1.0f), icon);
 			imgui->PopClipRect();
 			if (hovered)
 				imgui->SetTooltip(tooltip);
@@ -2663,9 +2670,11 @@ namespace CodexUI
 				RenderTitleAll(imgui);
 
 			TitleClicks clicks;
-			const char* collapseTip = ctrl ? (AllPinsCollapsed() ? "Expand all pins" : "Collapse all pins")
-				: (slot.collapsed ? "Expand this recipe." : "Collapse this recipe.");
-			clicks.collapse = RenderTitleButton(imgui, 1, TitleGlyph::Collapse, collapseTip);
+			// The button shows what a click does: with Ctrl, to every pin.
+			const bool expands = ctrl ? AllPinsCollapsed() : slot.collapsed;
+			const char* collapseTip = ctrl ? (expands ? "Expand all pins" : "Collapse all pins")
+				: (expands ? "Expand this recipe." : "Collapse this recipe.");
+			clicks.collapse = RenderTitleButton(imgui, 1, expands ? TitleGlyph::Expand : TitleGlyph::Collapse, collapseTip);
 			clicks.close = RenderTitleButton(imgui, 0, TitleGlyph::Close, ctrl ? "Close all pins" : "Unpin this recipe.");
 			return clicks;
 		}
