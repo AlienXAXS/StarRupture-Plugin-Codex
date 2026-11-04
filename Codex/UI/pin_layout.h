@@ -538,12 +538,12 @@ namespace CodexPinLayout
 				bottom = k;
 		}
 
-		const float topX = std::min(at[top].x + sizes[top].w, screenW);
+		const float topX = (std::min)(at[top].x + sizes[top].w, screenW);
 		if (at[top].y >= arrowH)
 			return { { topX, at[top].y }, 1.0f };
 		const float bottomY = at[bottom].y + sizes[bottom].h;
 		if (bottomY + arrowH <= screenH)
-			return { { std::min(at[bottom].x + sizes[bottom].w, screenW), bottomY }, 0.0f };
+			return { { (std::min)(at[bottom].x + sizes[bottom].w, screenW), bottomY }, 0.0f };
 		return { { topX, arrowH }, 1.0f };
 	}
 }
