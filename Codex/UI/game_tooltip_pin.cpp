@@ -248,7 +248,13 @@ namespace CodexTooltipPin
 		std::vector<HintRow> g_rows;
 		float g_sinceLook = 0.0f;
 		bool g_hintsOn = false;                // Menu.GameTooltipHints, read once at Init
-		std::atomic<bool> g_cursorUp{ false }; // for the render thread
+		std::atomic<uint64_t> g_uiState{ 0 }; // the loader's UI state, for the render thread
+
+		// Game thread, from the loader's tick, when a bit in kUIStateMask changes.
+		void OnUIStateChanged(uint64_t /*oldState*/, uint64_t newState, void* /*userData*/)
+		{
+			g_uiState.store(newState, std::memory_order_relaxed);
+		}
 
 		void HintProblem(const std::string& what)
 		{
@@ -482,14 +488,6 @@ namespace CodexTooltipPin
 			return {};
 		}
 
-		// Whether the player's cursor is up: the only time a tooltip can be open.
-		bool CursorUp()
-		{
-			SDK::UWorld* world = PluginSdkRuntime::GetWorld();
-			SDK::APlayerController* controller = world ? SDK::UGameplayStatics::GetPlayerController(world, 0) : nullptr;
-			return controller && controller->bShowMouseCursor;
-		}
-
 		void WatchTooltips(bool cursorUp)
 		{
 			IPluginHooks* hooks = GetHooks();
@@ -621,15 +619,18 @@ namespace CodexTooltipPin
 		}
 	}
 
-	bool GameCursorUp()
+	uint64_t UIState()
 	{
-		return g_cursorUp.load(std::memory_order_relaxed);
+		return g_uiState.load(std::memory_order_relaxed);
 	}
 
 	void Init(IPluginSelf* self)
 	{
 		if (!self->hooks->Input || !self->hooks->UI)
 			return;
+
+		if (self->hooks->GameMenu)
+			self->hooks->GameMenu->RegisterOnUIStateChanged(kUIStateMask, &OnUIStateChanged, nullptr);
 
 		g_hintsOn = CodexConfig::Config::GetGameTooltipHints();
 
@@ -648,19 +649,8 @@ namespace CodexTooltipPin
 	// On the game thread, from the engine tick.
 	void Tick(float deltaSeconds)
 	{
-		// The cursor flag is read here for the render thread (the pinned cards
-		// are editable while a game screen has the cursor up); the objects are
-		// only touched on this thread.
-		bool cursorUp = false;
-		try
-		{
-			cursorUp = CursorUp();
-		}
-		catch (...)
-		{
-			// A failed read counts as no cursor; the watch below logs its own failures.
-		}
-		g_cursorUp.store(cursorUp, std::memory_order_relaxed);
+		// A tooltip can only be open while the player's cursor is up.
+		const bool cursorUp = (UIState() & PLUGIN_UI_CURSOR_UP) != 0;
 
 		const std::string askedItem = TakePlannerAsk();
 		if (!askedItem.empty())
@@ -710,11 +700,13 @@ namespace CodexTooltipPin
 			}
 		}
 
-		g_cursorUp.store(false, std::memory_order_relaxed);
+		g_uiState.store(0, std::memory_order_relaxed);
 		TakePlannerAsk();
 
 		if (self && self->hooks->Input && self->hooks->UI)
 		{
+			if (self->hooks->GameMenu)
+				self->hooks->GameMenu->UnregisterOnUIStateChanged(&OnUIStateChanged, nullptr);
 			self->hooks->Input->UnregisterKeybindByName(CodexConfig::Config::GetGamePinKey(), EModKeyEvent::Pressed, &OnPinKeyPressed);
 			const std::string plannerKey = CodexConfig::Config::GetGamePlannerKey();
 			if (!plannerKey.empty())

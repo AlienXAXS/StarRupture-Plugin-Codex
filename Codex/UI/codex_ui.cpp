@@ -2487,8 +2487,7 @@ namespace CodexUI
 			IPluginHooks* hooks = GetHooks();
 			if (!hooks)
 				return false;
-			return (hooks->GameMenu && hooks->GameMenu->IsPauseMenuOpen())
-				|| CodexTooltipPin::GameCursorUp()
+			return (CodexTooltipPin::UIState() & CodexTooltipPin::kUIStateMask) != 0
 				|| (hooks->UI && hooks->UI->IsOverlayOpen());
 		}
 

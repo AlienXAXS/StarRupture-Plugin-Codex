@@ -14,10 +14,13 @@ namespace CodexTooltipPin
 {
 	void Init(IPluginSelf* self);
 
-	// True while a game screen has the mouse cursor up (a machine menu, the
-	// recipe station, the inventory, the pause menu). Refreshed every tick on the
-	// game thread; safe from any thread.
-	bool GameCursorUp();
+	// The loader's UI state bits Codex follows: the pause menu, and a game screen
+	// having the mouse cursor up (a machine menu, the recipe station, the inventory).
+	inline constexpr uint64_t kUIStateMask = PLUGIN_UI_PAUSE_MENU | PLUGIN_UI_CURSOR_UP;
+
+	// The loader's UI state as of its last game tick. Only the bits in kUIStateMask
+	// are kept current. Safe from any thread.
+	uint64_t UIState();
 	void Tick(float deltaSeconds);
 	void Shutdown(IPluginSelf* self);
 }
