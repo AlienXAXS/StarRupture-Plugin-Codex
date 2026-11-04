@@ -34,11 +34,10 @@ loader the plugin shows "Needs loader" and stays off.
 
 - **Pins under menus** <sup>[✦](#msantoro12)</sup> -- while any game menu is open (the Escape menu, a machine's
   screen, the build menu and the rest), a small arrow button appears just above the top pinned
-  card, or under the pins when there is no room above. It controls all pins together. The **down
-  arrow** sends the pins below the menu: they turn faint and see-through and let clicks pass, so the menu
-  underneath can be used, the same way the WAILA card behaves under menus. The arrow then turns
-  into an **up arrow**, which brings them back on top. The arrow stays solid and
-  clickable. The choice lasts for the session, so it stays set the next time a menu opens, and
+  card, or under the pins when there is no room above. It controls all pins together. The **double
+  up arrow** tucks the pins into itself: each one shrinks into the button and disappears, so the
+  menu underneath can be used. The arrow then turns into a **double down arrow**, which brings
+  them back out the same way. The arrow always stays clickable. The choice lasts for the session, so it stays set the next time a menu opens, and
   resets when the game restarts. During plain gameplay the pins behave as before.
 
 ---
