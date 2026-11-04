@@ -2615,25 +2615,26 @@ namespace CodexUI
 		constexpr int kColButtonHovered = 22;
 		constexpr int kColButtonActive  = 23;
 
-		// Where a pinned window's title bar holds its buttons: the first at the right
-		// end, where ImGui puts a window's own close button (widget windows are
-		// begun without p_open, so they have none), the next one to its left.
+		// Where a pinned window's title bar holds its buttons: the first ends at
+		// `right`, where ImGui puts a window's own close button (widget windows are
+		// begun without p_open, so they have none), the next one to its left. Each
+		// is a square of the font size, FramePadding.y from the top of the bar, so
+		// it is centred in the bar's height.
 		struct TitleButtonBox
 		{
 			float minX, minY, maxX, maxY;
 		};
 
-		TitleButtonBox TitleButtonAt(IModLoaderImGui* imgui, int fromRight)
+		TitleButtonBox TitleButtonAt(IModLoaderImGui* imgui, float right, int fromRight)
 		{
-			float winX = 0.0f, winY = 0.0f, winW = 0.0f, winH = 0.0f;
+			float winX = 0.0f, winY = 0.0f;
 			imgui->GetWindowPos(&winX, &winY);
-			imgui->GetWindowSize(&winW, &winH);
 
 			const float size = imgui->GetFontSize();
 			const float pad  = (imgui->GetFrameHeight() - size) * 0.5f;
-			const float minX = winX + winW - pad - size - static_cast<float>(fromRight) * (size + pad);
+			const float maxX = right - static_cast<float>(fromRight) * (size + pad);
 			const float minY = winY + pad;
-			return { minX, minY, minX + size, minY + size };
+			return { maxX - size, minY, maxX, minY + size };
 		}
 
 		// The title buttons' glyphs, from the loader's Material Icons font (see its
@@ -2676,34 +2677,28 @@ namespace CodexUI
 
 		enum class TitleGlyph { Close, Collapse, Expand };
 
-		// One button of a pinned window's title bar, hit-tested where it is drawn.
-		// True when it is clicked.
-		bool RenderTitleButton(IModLoaderImGui* imgui, int fromRight, TitleGlyph glyph, const char* tooltip)
+		// One button of a pinned window's title bar: an item of its own, like
+		// ImGui's close button, so ImGui hovers it instead of the title bar behind
+		// it (no move cursor, and a press or drag on it never moves the window),
+		// and it takes the same hover and held colors. True when it is clicked.
+		// The caller has pushed a clip rect over the title bar, which the window's
+		// own is not: ImGui clips an item outside its clip rect out of hit-testing.
+		bool RenderTitleButton(IModLoaderImGui* imgui, const TitleButtonBox& box, const char* id, TitleGlyph glyph, const char* tooltip)
 		{
-			float winX = 0.0f, winY = 0.0f, winW = 0.0f, winH = 0.0f;
-			imgui->GetWindowPos(&winX, &winY);
-			imgui->GetWindowSize(&winW, &winH);
+			imgui->SetCursorScreenPos(box.minX, box.minY);
+			const bool clicked = imgui->InvisibleButton(id, box.maxX - box.minX, box.maxY - box.minY);
+			const bool hovered = imgui->IsItemHovered();
+			const bool held = imgui->IsItemActive();
 
-			const TitleButtonBox box = TitleButtonAt(imgui, fromRight);
-			const float size = box.maxX - box.minX;
-			const bool hovered = imgui->IsWindowHovered(0) && imgui->IsMouseHoveringRect(box.minX, box.minY, box.maxX, box.maxY, false);
-			const bool clicked = hovered && imgui->IsMouseClicked(0, false);
-
-			// The window's draw list is clipped to the content area, below the
-			// title bar.
 			PluginDrawList dl = imgui->GetWindowDrawList();
-			imgui->PushClipRect(winX, winY, winX + winW, winY + winH, false);
-			const float cx = (box.minX + box.maxX) * 0.5f;
-			const float cy = (box.minY + box.maxY) * 0.5f;
-			if (hovered)
-				imgui->DL_AddCircleFilled(dl, cx, cy, size * 0.5f + 1.0f,
-					imgui->GetColorU32FromCol(clicked ? kColButtonActive : kColButtonHovered, 1.0f), 12);
+			if (hovered || held)
+				imgui->DL_AddRectFilled(dl, box.minX, box.minY, box.maxX, box.maxY,
+					imgui->GetColorU32FromCol(held ? kColButtonActive : kColButtonHovered, 1.0f), 0.0f, 0);
 			const char* icon = glyph == TitleGlyph::Close ? kIconClose
 				: glyph == TitleGlyph::Collapse ? kIconCollapse : kIconExpand;
 			const IconInk& ink = glyph == TitleGlyph::Close ? kInkClose
 				: glyph == TitleGlyph::Collapse ? kInkCollapse : kInkExpand;
-			DrawIconCentred(imgui, dl, icon, ink, cx, cy);
-			imgui->PopClipRect();
+			DrawIconCentred(imgui, dl, icon, ink, (box.minX + box.maxX) * 0.5f, (box.minY + box.maxY) * 0.5f);
 			if (hovered)
 				imgui->SetTooltip(tooltip);
 			return clicked;
@@ -2711,21 +2706,13 @@ namespace CodexUI
 
 		// The word "all" in the title bar's own text, just left of the buttons:
 		// shown while Ctrl is held, when the buttons act on every pin.
-		void RenderTitleAll(IModLoaderImGui* imgui)
+		void RenderTitleAll(IModLoaderImGui* imgui, const TitleButtonBox& collapse)
 		{
-			float winX = 0.0f, winY = 0.0f, winW = 0.0f, winH = 0.0f;
-			imgui->GetWindowPos(&winX, &winY);
-			imgui->GetWindowSize(&winW, &winH);
-
-			const TitleButtonBox collapse = TitleButtonAt(imgui, 1);
 			const float pad = (imgui->GetFrameHeight() - imgui->GetFontSize()) * 0.5f;
 			float textW = 0.0f, textH = 0.0f;
 			imgui->CalcTextSize("all", &textW, &textH, false, -1.0f);
-
-			PluginDrawList dl = imgui->GetWindowDrawList();
-			imgui->PushClipRect(winX, winY, winX + winW, winY + winH, false);
-			imgui->DL_AddText(dl, collapse.minX - pad - textW, collapse.minY, imgui->GetColorU32FromCol(kColText, 1.0f), "all");
-			imgui->PopClipRect();
+			imgui->DL_AddText(imgui->GetWindowDrawList(), collapse.minX - pad - textW, collapse.minY,
+				imgui->GetColorU32FromCol(kColText, 1.0f), "all");
 		}
 
 		// Whether Ctrl is held, which makes a pin's title buttons act on every pin.
@@ -2743,20 +2730,31 @@ namespace CodexUI
 			bool collapse = false;
 		};
 
-		// The collapse and close buttons of a pinned window's title bar, with "all"
-		// before them while Ctrl is held.
-		TitleClicks RenderTitleButtons(IModLoaderImGui* imgui, const PinSlot& slot, bool ctrl)
+		// The collapse and close buttons of a pinned window's title bar, ending at
+		// `right`, with "all" before them while Ctrl is held.
+		TitleClicks RenderTitleButtons(IModLoaderImGui* imgui, const PinSlot& slot, bool ctrl, float right)
 		{
+			float winX = 0.0f, winY = 0.0f, winW = 0.0f, winH = 0.0f;
+			imgui->GetWindowPos(&winX, &winY);
+			imgui->GetWindowSize(&winW, &winH);
+
+			// The window's draw list is clipped to the content area, below the
+			// title bar.
+			imgui->PushClipRect(winX, winY, winX + winW, winY + winH, false);
+			const TitleButtonBox collapseBox = TitleButtonAt(imgui, right, 1);
 			if (ctrl)
-				RenderTitleAll(imgui);
+				RenderTitleAll(imgui, collapseBox);
 
 			TitleClicks clicks;
 			// The button shows what a click does: with Ctrl, to every pin.
 			const bool expands = ctrl ? AllPinsCollapsed() : slot.collapsed;
 			const char* collapseTip = ctrl ? (expands ? "Expand all pins" : "Collapse all pins")
 				: (expands ? "Expand this recipe." : "Collapse this recipe.");
-			clicks.collapse = RenderTitleButton(imgui, 1, expands ? TitleGlyph::Expand : TitleGlyph::Collapse, collapseTip);
-			clicks.close = RenderTitleButton(imgui, 0, TitleGlyph::Close, ctrl ? "Close all pins" : "Unpin this recipe.");
+			clicks.collapse = RenderTitleButton(imgui, collapseBox, "##CodexPinCollapse",
+				expands ? TitleGlyph::Expand : TitleGlyph::Collapse, collapseTip);
+			clicks.close = RenderTitleButton(imgui, TitleButtonAt(imgui, right, 0), "##CodexPinClose",
+				TitleGlyph::Close, ctrl ? "Close all pins" : "Unpin this recipe.");
+			imgui->PopClipRect();
 			return clicks;
 		}
 
@@ -2839,6 +2837,72 @@ namespace CodexUI
 			SetPinLayerArrowShown(now.arrowShown);
 		}
 
+		// What a pinned window shows below its title bar.
+		void RenderPinContent(IModLoaderImGui* imgui, const PinSlot& slot, bool interactive)
+		{
+			CodexRecipes::RecipeInfo info;
+			if (!slot.nativeRecipe || !CodexRecipes::FindByNativeRecipe(slot.nativeRecipe, info))
+			{
+				imgui->TextDisabled("Recipe unavailable.");
+				return;
+			}
+
+			IPluginImGuiTextures* textures = GetHooks() ? GetHooks()->ImGuiTextures : nullptr;
+			constexpr float kIconSize = 20.0f;
+
+			char line[256];
+			snprintf(line, sizeof(line), "%s  -  %.1fs", info.buildingName.c_str(), info.buildTimeSeconds);
+			imgui->TextDisabled(line);
+
+			for (const CodexRecipes::RecipeItemRef& input : info.inputs)
+			{
+				// One group, so a right-click on the icon or the text pins the ingredient's recipe.
+				// (The pin's own product is already pinned, so it has no hook.)
+				imgui->BeginGroup();
+				PluginTextureHandle icon = CodexIcons::GetIcon(input.uniqueItemName);
+				if (icon && textures)
+				{
+					textures->Image(icon, kIconSize, kIconSize);
+					imgui->SameLine(0.0f, 6.0f);
+				}
+				const float rate = info.buildTimeSeconds > 0.0f
+					? (static_cast<float>(input.count) / info.buildTimeSeconds) * 60.0f
+					: 0.0f;
+				if (rate > 0.0f)
+					snprintf(line, sizeof(line), "%dx %s  (%.1f/min)", input.count, input.displayName.c_str(), rate);
+				else
+					snprintf(line, sizeof(line), "%dx %s", input.count, input.displayName.c_str());
+				imgui->AlignTextToFramePadding();
+				imgui->Text(line);
+				imgui->EndGroup();
+				if (interactive)
+					PinOnRightClick(imgui, input.uniqueItemName);
+			}
+
+			imgui->Separator();
+
+			PluginTextureHandle outIcon = CodexIcons::GetIcon(info.output.uniqueItemName);
+			if (outIcon && textures)
+			{
+				textures->Image(outIcon, kIconSize, kIconSize);
+				imgui->SameLine(0.0f, 6.0f);
+			}
+			if (info.outputsPerMinute > 0.0f)
+				snprintf(line, sizeof(line), "%dx %s  (%.1f/min)", info.output.count, info.output.displayName.c_str(), info.outputsPerMinute);
+			else
+				snprintf(line, sizeof(line), "%dx %s", info.output.count, info.output.displayName.c_str());
+			imgui->AlignTextToFramePadding();
+			imgui->Text(line);
+
+			if (interactive)
+			{
+				if (imgui->SmallButton("Open"))
+					OpenDetail(info.nativeRecipe);
+				imgui->SameLine(0.0f, 6.0f);
+				RenderLaunchPlannerButton(imgui, info);
+			}
+		}
+
 		void RenderPinSlot(int index, IModLoaderImGui* imgui)
 		{
 			PinSlot& slot = g_pins[index];
@@ -2853,6 +2917,9 @@ namespace CodexUI
 			imgui->GetWindowSize(&winW, &winH);
 			if (winW > 0.0f && winH > 0.0f)
 				slot.rect = { winX, winY, winW, winH, true };
+			float cursorX = 0.0f, cursorY = 0.0f;
+			imgui->GetCursorScreenPos(&cursorX, &cursorY);
+			const float windowPadX = cursorX - winX; // the theme's WindowPadding
 
 			imgui->GetDisplaySize(&g_displayW, &g_displayH);
 
@@ -2920,71 +2987,22 @@ namespace CodexUI
 			const bool interactive = PinsEditable(imgui);
 			const bool ctrl = interactive && CtrlHeld();
 
-			CodexRecipes::RecipeInfo info;
-			if (!slot.nativeRecipe || !CodexRecipes::FindByNativeRecipe(slot.nativeRecipe, info))
-			{
-				imgui->TextDisabled("Recipe unavailable.");
-				if (interactive)
-					ActOnTitleClicks(index, RenderTitleButtons(imgui, slot, ctrl), ctrl);
-				return;
-			}
+			// The content is a group so its right edge is known to the title buttons,
+			// which are submitted after it: ImGui sizes a window to fit its items, so
+			// buttons placed from the window's right edge would keep it from ever
+			// shrinking. Their right end is the content's, which is the window's less
+			// its padding (the cursor started that far in) once it has fitted.
+			imgui->BeginGroup();
+			RenderPinContent(imgui, slot, interactive);
+			imgui->EndGroup();
 
-			IPluginImGuiTextures* textures = GetHooks() ? GetHooks()->ImGuiTextures : nullptr;
-			constexpr float kIconSize = 20.0f;
-
-			char line[256];
-			snprintf(line, sizeof(line), "%s  -  %.1fs", info.buildingName.c_str(), info.buildTimeSeconds);
-			imgui->TextDisabled(line);
-			const TitleClicks titleClicks = interactive ? RenderTitleButtons(imgui, slot, ctrl) : TitleClicks{};
-
-			for (const CodexRecipes::RecipeItemRef& input : info.inputs)
-			{
-				// One group, so a right-click on the icon or the text pins the ingredient's recipe.
-				// (The pin's own product is already pinned, so it has no hook.)
-				imgui->BeginGroup();
-				PluginTextureHandle icon = CodexIcons::GetIcon(input.uniqueItemName);
-				if (icon && textures)
-				{
-					textures->Image(icon, kIconSize, kIconSize);
-					imgui->SameLine(0.0f, 6.0f);
-				}
-				const float rate = info.buildTimeSeconds > 0.0f
-					? (static_cast<float>(input.count) / info.buildTimeSeconds) * 60.0f
-					: 0.0f;
-				if (rate > 0.0f)
-					snprintf(line, sizeof(line), "%dx %s  (%.1f/min)", input.count, input.displayName.c_str(), rate);
-				else
-					snprintf(line, sizeof(line), "%dx %s", input.count, input.displayName.c_str());
-				imgui->AlignTextToFramePadding();
-				imgui->Text(line);
-				imgui->EndGroup();
-				if (interactive)
-					PinOnRightClick(imgui, input.uniqueItemName);
-			}
-
-			imgui->Separator();
-
-			PluginTextureHandle outIcon = CodexIcons::GetIcon(info.output.uniqueItemName);
-			if (outIcon && textures)
-			{
-				textures->Image(outIcon, kIconSize, kIconSize);
-				imgui->SameLine(0.0f, 6.0f);
-			}
-			if (info.outputsPerMinute > 0.0f)
-				snprintf(line, sizeof(line), "%dx %s  (%.1f/min)", info.output.count, info.output.displayName.c_str(), info.outputsPerMinute);
-			else
-				snprintf(line, sizeof(line), "%dx %s", info.output.count, info.output.displayName.c_str());
-			imgui->AlignTextToFramePadding();
-			imgui->Text(line);
-
+			TitleClicks titleClicks;
 			if (interactive)
 			{
-				if (imgui->SmallButton("Open"))
-					OpenDetail(info.nativeRecipe);
-				imgui->SameLine(0.0f, 6.0f);
-				RenderLaunchPlannerButton(imgui, info);
+				float contentRight = 0.0f, contentBottom = 0.0f;
+				imgui->GetItemRectMax(&contentRight, &contentBottom);
+				titleClicks = RenderTitleButtons(imgui, slot, ctrl, (std::min)(contentRight, winX + winW - windowPadX));
 			}
-
 			ActOnTitleClicks(index, titleClicks, ctrl);
 		}
 
