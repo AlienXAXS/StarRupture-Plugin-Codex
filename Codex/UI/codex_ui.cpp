@@ -21,6 +21,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -1358,7 +1359,14 @@ namespace CodexUI
 		// What the pin cards carry while they are below the game's menu: the same
 		// without the opt-in to the mouse over a menu, so clicks go through them
 		// to the menu, as they do through WAILA's card.
-		constexpr int kPinBelowFlags = kPinWindowFlags & ~PluginWindowFlags_PauseMenuMouseInputs;
+		// They also lose ImGui's own window background (the render paints a faint
+		// one by hand) and are drawn at kPinBelowAlpha, as WAILA's card is.
+		constexpr int kPinBelowFlags = (kPinWindowFlags & ~PluginWindowFlags_PauseMenuMouseInputs) |
+			PluginWindowFlags_NoBackground;
+
+		// How strongly a pin card shows while it is below the menu, for its
+		// background and for everything on it.
+		constexpr float kPinBelowAlpha = 0.35f;
 
 		// A card held at a fixed height shows no scrollbar and ignores the mouse
 		// wheel (ImGuiWindowFlags_NoScrollWithMouse, which the SDK has no name for).
@@ -2612,6 +2620,8 @@ namespace CodexUI
 
 		// ImGui's ImGuiCol_ indices for the close button's colors.
 		constexpr int kColText          = 0;
+		constexpr int kColWindowBg      = 2;
+		constexpr int kStyleVarAlpha    = 0; // ImGuiStyleVar_Alpha
 		constexpr int kColButtonHovered = 22;
 		constexpr int kColButtonActive  = 23;
 
@@ -2916,6 +2926,25 @@ namespace CodexUI
 			// The layout has set this frame's targets: the glides move towards them.
 			if (index == 0)
 				StepPinGlides();
+
+			// Below the menu the card is faint: its background is painted here at the
+			// reduced alpha (the window has none of its own), and the style's alpha
+			// covers everything drawn after it, up to the end of this render.
+			struct BelowAlpha
+			{
+				IModLoaderImGui* imgui;
+				explicit BelowAlpha(IModLoaderImGui* ui) : imgui(ui) { imgui->PushStyleVarFloat(kStyleVarAlpha, kPinBelowAlpha); }
+				~BelowAlpha() { imgui->PopStyleVar(1); }
+			};
+			std::optional<BelowAlpha> belowAlpha;
+			if (g_pinsDropped)
+			{
+				if (slot.rect.valid)
+					imgui->DL_AddRectFilled(imgui->GetWindowDrawList(), slot.rect.x, slot.rect.y,
+						slot.rect.x + slot.rect.w, slot.rect.y + slot.rect.h,
+						imgui->GetColorU32FromCol(kColWindowBg, kPinBelowAlpha), 0.0f, 0);
+				belowAlpha.emplace(imgui);
+			}
 
 			const bool interactive = PinsEditable(imgui);
 			const bool ctrl = interactive && CtrlHeld();
