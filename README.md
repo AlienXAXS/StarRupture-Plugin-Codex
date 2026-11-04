@@ -69,10 +69,7 @@ loader the plugin shows "Needs loader" and stays off.
   Codex or the Escape menu open. They are now also clickable and draggable while a game screen
   shows the mouse cursor: a machine's menu, the recipe station, the corporation terminal and
   the inventory. Click a pin's X to unpin it or drag a pin to move it there; a click on a pin
-  is taken by the pin, and every other click goes to the game as before. This needs the mod
-  loader build that shares the mouse on game screens (the loader release after 1.22.1); on an
-  older loader the pins stay as they were, editable only with the Codex, the overlay or the
-  Escape menu open.
+  is taken by the pin, and every other click goes to the game as before.
 - **Planner** -- the recipe tab and every pinned window (while the Codex, the Escape menu or a game screen with the cursor is open, like
   Open) have a button that opens a production planner for the recipe's output in
   your browser. Choose the planner with `Planner`: the StarRupture Planner
@@ -97,9 +94,7 @@ box and pin positions have no field: the **Saved state** row at the end of the `
 section has a **Clear** button that puts the search box back in the centre and the pins back
 on their edge at once, even with the search box open. The saved pins are not touched, so they
 still come back at the next start; only pinning and unpinning change them. The button counts the saved pins like any other saved value, so it can look enabled when only they differ from their defaults; pressing it then changes nothing. Values already in your config file
-keep working, and choices match ignoring case. The dropdowns and the hidden entries need a
-loader that has the Choice and Hidden config types (v71); on an older one the page shows
-them as plain text fields.
+keep working, and choices match ignoring case. The dropdowns and the hidden entries are drawn by the mod loader's config page.
 
 
 | Section | Key | Default | Description |
