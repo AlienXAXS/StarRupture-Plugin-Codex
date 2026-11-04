@@ -18,6 +18,9 @@ loader the plugin shows "Needs loader" and stays off.
   shows its tooltip, then **right-click** to pin the recipe that makes it, or
   **Ctrl + right-click** to open it in the Planner. Inventory slots keep the game's own
   right-click.
+
+<img src="images/codex-pin-from-menu.png" width="640" alt="The recipe station with the game's item tooltip open and four recipes pinned at the right edge of the screen">
+
 - **Pins, your way** <sup>[✦](#msantoro12)</sup> -- pins are saved between sessions, tiled or
   cascaded from the right, left or top edge, and dragged where you want them. Click the X on a
   pin's title bar to unpin it. Pins can be moved and unpinned while the Esc menu or the Codex is
@@ -84,15 +87,21 @@ loader the plugin shows "Needs loader" and stays off.
   shows the mouse cursor: a machine's menu, the recipe station, the corporation terminal and
   the inventory. Click a pin's X to unpin it or drag a pin to move it there; a click on a pin
   is taken by the pin, and every other click goes to the game as before.
-- **Planner** -- the recipe tab and every pinned window (while the Codex, the Escape menu or a game screen with the cursor is open, like
-  Open) have a button that opens a production planner for the recipe's output in
-  your browser. Choose the planner with `Planner`: the StarRupture Planner
-  (the default) adds the item at one machine's output, starruptureplanner.com and
-  starrupturecalc.com open their calculator for the item (starruptureplanner.com opens the
-  item's own page for the items its calculator has no recipe for), and starrupture-planner.com
-  opens its planner page (it has no item link). Items a planner does not list open it without
-  an item. For any other planner, set `Planner` to `Custom` and give `CustomUrlTemplate` an
-  address with `{item}`, `{name}` or `{game}`.
+- **Planner** -- pins and recipe cards open straight in a production planner: the recipe tab and
+  every pinned window (while the Codex, the Escape menu or a game screen with the cursor is open,
+  like Open) have a **Planner** button that opens it in your browser, set to the recipe's output.
+  Choose the planner with `Planner`:
+  - [StarRupture Planner](https://starrupture.goodstuff.software/) (the default) adds the item at one machine's output
+  - [starruptureplanner.com](https://starruptureplanner.com/) opens its calculator for the item, or the item's own page for items its calculator has no recipe for
+  - [starrupturecalc.com](https://www.starrupturecalc.com/) opens its calculator for the item
+  - [starrupture-planner.com](https://www.starrupture-planner.com/) opens its planner page (it has no item link)
+
+  Items a planner does not list open it without an item. To add your own planner, set `Planner`
+  to `Custom` and give `CustomUrlTemplate` an address with `{item}`, `{name}` or `{game}`.
+
+<img src="images/codex-pinned-cards.png" width="300" alt="Pinned recipe cards at the screen edge, each with Open and Planner buttons">
+<img src="images/codex-launch-planner.png" width="420" alt="The Codex recipe tab for Nanofiber with the Launch planner button">
+
 - **Configurable** -- enable/disable the plugin, rebind the keys and choose the pin layout
   from the mod loader's config page or config file. `Planner`, `PinLayout`, `PinArrangement`
   and `PinGrouping` are dropdowns there.
@@ -101,7 +110,7 @@ loader the plugin shows "Needs loader" and stays off.
 
 Settings are written to the plugin's config file on first run and can be edited there.
 
-<img src="images/config-tab.png" width="480" alt="The mod loader's Config tab with Codex selected: dropdowns for the pin settings, the Saved state row and the Planner dropdown">
+<img src="images/config-tab.png" width="640" alt="The mod loader's Config tab with Codex selected: dropdowns for the pin settings, the Saved state row and the Planner dropdown">
 
 On the mod loader's config page, `Planner`, `PinLayout`, `PinArrangement` and `PinGrouping` are dropdowns. The search
 box and pin positions have no field: the **Saved state** row at the end of the `Menu`
