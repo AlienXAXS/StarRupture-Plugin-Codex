@@ -489,4 +489,55 @@ namespace CodexPinLayout
 		const long value = strtol(text, &end, 10);
 		return end == text ? kGapDefault : static_cast<int>(std::clamp(value, static_cast<long>(kGapMin), static_cast<long>(kGapMax)));
 	}
+
+	// The pin layer arrow: one button over the pins that sends them below the
+	// game's menu (they stop taking the mouse, as WAILA's card does) and brings
+	// them back.
+	//
+	// It shows while a game menu is up and a pin is, and the pins are below
+	// only then, so they are never click-through where the arrow is not.
+	// `arrowAvailable` is false when the arrow's window could not be made.
+	struct PinLayerState
+	{
+		bool arrowShown = false;
+		bool pinsBelow = false;
+	};
+
+	inline PinLayerState PinLayerNow(int pinCount, bool belowSet, bool menuUp, bool arrowAvailable)
+	{
+		PinLayerState state;
+		state.arrowShown = arrowAvailable && menuUp && pinCount > 0;
+		state.pinsBelow = state.arrowShown && belowSet;
+		return state;
+	}
+
+	// Where the arrow's window goes: its corner (with the pivot to match, the
+	// horizontal one is always 1) on the right edge of the top pin, the one with
+	// the smallest y (the first on a tie), so it sits above the pins however
+	// they are arranged. `at` and `sizes` are the `count` pins that are up, count
+	// at least 1. With no room above the top pin for a window `arrowH` high it
+	// goes under the lowest pin instead, on that pin's right edge, rather than
+	// over a title bar.
+	struct ArrowSpot
+	{
+		Point at;
+		float pivotY;
+	};
+
+	inline ArrowSpot PinLayerArrowSpot(const Point* at, const Size* sizes, int count, float arrowH)
+	{
+		int top = 0;
+		int bottom = 0;
+		for (int k = 1; k < count; ++k)
+		{
+			if (at[k].y < at[top].y)
+				top = k;
+			if (at[k].y + sizes[k].h > at[bottom].y + sizes[bottom].h)
+				bottom = k;
+		}
+
+		if (at[top].y >= arrowH)
+			return { { at[top].x + sizes[top].w, at[top].y }, 1.0f };
+		return { { at[bottom].x + sizes[bottom].w, at[bottom].y + sizes[bottom].h }, 0.0f };
+	}
 }

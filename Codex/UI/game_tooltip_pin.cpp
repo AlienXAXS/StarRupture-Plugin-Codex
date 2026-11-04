@@ -250,7 +250,7 @@ namespace CodexTooltipPin
 		bool g_hintsOn = false;                // Menu.GameTooltipHints, read once at Init
 		std::atomic<uint64_t> g_uiState{ 0 }; // the loader's UI state, for the render thread
 
-		// Game thread, from the loader's tick, when a bit in kUIStateMask changes.
+		// Game thread, from the loader's tick, when a bit in kSubscribedMask changes.
 		void OnUIStateChanged(uint64_t /*oldState*/, uint64_t newState, void* /*userData*/)
 		{
 			g_uiState.store(newState, std::memory_order_relaxed);
@@ -630,7 +630,7 @@ namespace CodexTooltipPin
 			return;
 
 		if (self->hooks->GameMenu)
-			self->hooks->GameMenu->RegisterOnUIStateChanged(kUIStateMask, &OnUIStateChanged, nullptr);
+			self->hooks->GameMenu->RegisterOnUIStateChanged(kSubscribedMask, &OnUIStateChanged, nullptr);
 
 		g_hintsOn = CodexConfig::Config::GetGameTooltipHints();
 

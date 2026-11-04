@@ -18,8 +18,16 @@ namespace CodexTooltipPin
 	// having the mouse cursor up (a machine menu, the recipe station, the inventory).
 	inline constexpr uint64_t kUIStateMask = PLUGIN_UI_PAUSE_MENU | PLUGIN_UI_CURSOR_UP;
 
-	// The loader's UI state as of its last game tick. Only the bits in kUIStateMask
-	// are kept current. Safe from any thread.
+	// The menus the pin layer arrow shows in: the Escape menu, a station's own
+	// screen and the build menu. The last two are menu-layer bits, which the
+	// loader reads from the game every tick once a plugin asks for one.
+	inline constexpr uint64_t kPinLayerMenus = PLUGIN_UI_PAUSE_MENU | PLUGIN_UI_STATION_MENU | PLUGIN_UI_BUILD_MENU;
+
+	// The bits Codex asks the loader to report.
+	inline constexpr uint64_t kSubscribedMask = kUIStateMask | kPinLayerMenus;
+
+	// The loader's UI state as of its last game tick. Only the bits in
+	// kSubscribedMask are kept current. Safe from any thread.
 	uint64_t UIState();
 	void Tick(float deltaSeconds);
 	void Shutdown(IPluginSelf* self);

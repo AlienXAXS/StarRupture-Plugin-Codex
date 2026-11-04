@@ -1354,9 +1354,39 @@ namespace CodexUI
 		constexpr int kPinWindowFlags = PluginWindowFlags_AlwaysAutoResize | PluginWindowFlags_NoSavedSettings |
 			PluginWindowFlags_PauseMenuMouseInputs;
 
+		// What the pin cards carry while they are below the game's menu: the same
+		// without the opt-in to the mouse over a menu, so clicks go through them
+		// to the menu, as they do through WAILA's card.
+		constexpr int kPinBelowFlags = kPinWindowFlags & ~PluginWindowFlags_PauseMenuMouseInputs;
+
 		// A card held at a fixed height shows no scrollbar and ignores the mouse
 		// wheel (ImGuiWindowFlags_NoScrollWithMouse, which the SDK has no name for).
 		constexpr int kPinHeldFlags = PluginWindowFlags_NoScrollbar | (1 << 4);
+
+		// The pin layer arrow: one button above the pins that sends them below the
+		// game's menu and back (see CodexPinLayout::PinLayerNow). It is a widget of
+		// its own that keeps the mouse over a menu, so it stays clickable while the
+		// pins are not.
+		WidgetHandle      g_layerWidget = nullptr;
+		PluginWindowHints g_layerHints{};
+		PluginWidgetDesc  g_layerDesc{};
+		bool              g_layerShown = false; // the widget's visibility as last set
+
+		// The player's choice, kept for the session. It is written by the arrow's
+		// click and read by the pins' render, so it is atomic.
+		std::atomic<bool> g_pinsBelow{ false };
+
+		// This frame, the pins are below: set from the first pin's render, read by
+		// the others. Render thread only.
+		bool g_pinsDropped = false;
+
+		void SetPinLayerArrowShown(bool shown)
+		{
+			if (shown == g_layerShown || !g_layerWidget || !g_self || !g_self->hooks->UI)
+				return;
+			g_layerShown = shown;
+			g_self->hooks->UI->SetWidgetVisible(g_layerWidget, shown);
+		}
 
 		// Set when the lead pin has to be put back at its anchor: the layout
 		// was changed in the config, the old lead was unpinned, the screen
@@ -2476,6 +2506,11 @@ namespace CodexUI
 			}
 			if (g_self && g_self->hooks->UI && last.widget)
 				g_self->hooks->UI->SetWidgetVisible(last.widget, false);
+			if (count == 1)
+			{
+				g_pinsDropped = false;
+				SetPinLayerArrowShown(false);
+			}
 			if (persist)
 				CommitPinnedRecipes();
 		}
@@ -2736,6 +2771,26 @@ namespace CodexUI
 				|| (hooks->UI && hooks->UI->IsOverlayOpen());
 		}
 
+		// The first pin's render: works out whether the arrow shows and the pins are
+		// below the menu this frame. The menus are the loader's UI state bits, as
+		// of its last game tick.
+		void UpdatePinLayer()
+		{
+			const bool menuUp = (CodexTooltipPin::UIState() & CodexTooltipPin::kPinLayerMenus) != 0;
+			const CodexPinLayout::PinLayerState now = CodexPinLayout::PinLayerNow(
+				PinCount(), g_pinsBelow.load(std::memory_order_relaxed), menuUp, g_layerWidget != nullptr);
+
+			// A press on a card that was about to take the mouse is not the start of a drag.
+			if (now.pinsBelow != g_pinsDropped)
+			{
+				g_pinsDropped = now.pinsBelow;
+				for (PinSlot& pin : g_pins)
+					pin.dragging = false;
+				g_pinGrab.pending = false;
+			}
+			SetPinLayerArrowShown(now.arrowShown);
+		}
+
 		void RenderPinSlot(int index, IModLoaderImGui* imgui)
 		{
 			PinSlot& slot = g_pins[index];
@@ -2759,6 +2814,7 @@ namespace CodexUI
 			{
 				AdvancePinClock(imgui);
 				UpdatePinGrouping(imgui);
+				UpdatePinLayer();
 			}
 
 			// Grouped: dragging any pin moves the whole group. The lead is moved by
@@ -2767,7 +2823,8 @@ namespace CodexUI
 			// follower. Ungrouped: every pin is dragged on its own.
 			const bool follower = !g_pinSettings.free && index != 0;
 			StepCollapse(imgui, slot, winH);
-			int windowFlags = slot.sizedFixed ? kPinWindowFlags | kPinHeldFlags : kPinWindowFlags;
+			const int cardFlags = g_pinsDropped ? kPinBelowFlags : kPinWindowFlags;
+			int windowFlags = slot.sizedFixed ? cardFlags | kPinHeldFlags : cardFlags;
 			if (follower)
 				windowFlags |= PluginWindowFlags_NoMove;
 			slot.hints.extra_window_flags = windowFlags;
@@ -2897,6 +2954,80 @@ namespace CodexUI
 
 		constexpr auto kPinRenderFns = MakePinRenderFns(std::make_integer_sequence<int, kMaxPins>{});
 
+		// The arrow's glyphs, from the loader's Material Icons font.
+		constexpr const char* kIconLayerDown = "\xEE\x97\x9B"; // U+E5DB arrow_downward: the pins are above, a click sends them below
+		constexpr const char* kIconLayerUp   = "\xEE\x97\x98"; // U+E5D8 arrow_upward: the pins are below, a click brings them back
+
+		// The arrow's window, put on the right edge of the top pin for the next frame.
+		void RenderPinLayerArrow(IModLoaderImGui* imgui)
+		{
+			float winW = 0.0f, winH = 0.0f;
+			imgui->GetWindowSize(&winW, &winH);
+
+			CodexPinLayout::Point at[kMaxPins];
+			CodexPinLayout::Size sizes[kMaxPins];
+			int count = 0;
+			for (int k = 0; k < PinCount(); ++k)
+			{
+				const PinRect& rect = g_pins[k].rect;
+				if (!rect.valid)
+					continue;
+				at[count] = { rect.x, rect.y };
+				sizes[count] = { rect.w, rect.h };
+				++count;
+			}
+			if (count > 0)
+			{
+				const CodexPinLayout::ArrowSpot spot = CodexPinLayout::PinLayerArrowSpot(at, sizes, count, winH);
+				g_layerHints.pos_x = spot.at.x;
+				g_layerHints.pos_y = spot.at.y;
+				g_layerHints.pivot_y = spot.pivotY;
+			}
+
+			const bool below = g_pinsBelow.load(std::memory_order_relaxed);
+			char label[48];
+			snprintf(label, sizeof(label), "%s###CodexPinLayerArrow", below ? kIconLayerUp : kIconLayerDown);
+			if (imgui->Button(label))
+				g_pinsBelow.store(!below, std::memory_order_relaxed);
+			if (imgui->IsItemHovered())
+				imgui->SetTooltip(below ? "Bring the pins back above the menu." : "Send the pins below the menu.");
+		}
+
+		void RegisterPinLayerArrow(IPluginSelf* self)
+		{
+			g_layerHints.width   = 0.0f;
+			g_layerHints.height  = 0.0f;
+			g_layerHints.pos_x   = -1.0f; // placed by RenderPinLayerArrow
+			g_layerHints.pos_y   = -1.0f;
+			g_layerHints.pivot_x = 1.0f;
+			g_layerHints.pivot_y = 1.0f;
+			g_layerHints.size_cond = 0;
+			g_layerHints.pos_cond  = 0; // Always
+			g_layerHints.extra_window_flags = PluginWindowFlags_NoTitleBar | PluginWindowFlags_NoResize |
+				PluginWindowFlags_NoMove | PluginWindowFlags_NoScrollbar | PluginWindowFlags_NoBackground |
+				PluginWindowFlags_AlwaysAutoResize | PluginWindowFlags_NoSavedSettings |
+				PluginWindowFlags_PauseMenuMouseInputs;
+
+			g_layerDesc.name        = "##CodexPinLayer";
+			g_layerDesc.renderFn    = &RenderPinLayerArrow;
+			g_layerDesc.windowHints = &g_layerHints;
+			g_layerWidget = self->hooks->UI->RegisterWidget(&g_layerDesc);
+			if (g_layerWidget)
+				self->hooks->UI->SetWidgetVisible(g_layerWidget, false);
+			g_layerShown = false;
+		}
+
+		void UnregisterPinLayerArrow(IPluginSelf* self)
+		{
+			g_pinsDropped = false;
+			g_layerShown = false;
+			if (g_layerWidget)
+			{
+				self->hooks->UI->UnregisterWidget(g_layerWidget);
+				g_layerWidget = nullptr;
+			}
+		}
+
 		void RegisterPinSlots(IPluginSelf* self)
 		{
 			for (int i = 0; i < kMaxPins; ++i)
@@ -3000,6 +3131,7 @@ namespace CodexUI
 		CodexConfig::Config::GetSearchBoxPos(g_searchSavedX, g_searchSavedY);
 		LoadPinSettings();
 		RegisterPinSlots(self);
+		RegisterPinLayerArrow(self);
 		LoadSavedPins();
 		g_restoreWaiting = true;
 		self->hooks->UI->RegisterOnConfigChanged(self, &OnConfigChanged);
@@ -3085,6 +3217,7 @@ namespace CodexUI
 
 		self->hooks->UI->UnregisterOnConfigChanged(self, &OnConfigChanged);
 		UnregisterPinSlots(self);
+		UnregisterPinLayerArrow(self);
 
 		self->hooks->UI->UnregisterOnPanelWindowClosed(&OnDetailPanelClosed);
 		if (g_detailPanel)

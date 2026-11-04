@@ -1133,6 +1133,107 @@ int main()
 		Check(migrated && CodexPinSet::FromSlots(moved).back() == "CR_Half", "a cut old value migrates what it holds", "migrate cut");
 	}
 
+	printf("pin layer arrow\n");
+	{
+		// Shown while a menu is up and a pin is; the pins are below only then.
+		int states = 0;
+		for (int pins = 0; pins <= kMaxPins; ++pins)
+			for (int below = 0; below <= 1; ++below)
+				for (int menu = 0; menu <= 1; ++menu)
+					for (int available = 0; available <= 1; ++available)
+					{
+						const PinLayerState s = PinLayerNow(pins, below != 0, menu != 0, available != 0);
+						const std::string where = std::to_string(pins) + " pins, below " + std::to_string(below) +
+							", menu " + std::to_string(menu) + ", available " + std::to_string(available);
+						Check(s.arrowShown == (pins > 0 && menu && available), "the arrow shows with a pin and a menu up", where);
+						Check(s.pinsBelow == (s.arrowShown && below), "the pins are below only while the arrow shows and below is set", where);
+						Check(!s.pinsBelow || s.arrowShown, "pins are never below without the arrow", where);
+						++states;
+					}
+		printf("  %d states checked\n", states);
+
+		const float arrowH = 30.0f;
+
+		// One pin: above it, on its right edge, the arrow's bottom-right corner there.
+		{
+			const Point at[] = { { 400, 200 } };
+			const Size sizes[] = { { 280, 150 } };
+			const ArrowSpot spot = PinLayerArrowSpot(at, sizes, 1, arrowH);
+			Check(spot.at.x == 680 && spot.at.y == 200 && spot.pivotY == 1.0f, "one pin: above its right edge", "one");
+		}
+
+		// Several pins: the one with the smallest y, wherever it is in the order.
+		{
+			const Point at[] = { { 900, 300 }, { 900, 460 }, { 100, 120 }, { 500, 120 } };
+			const Size sizes[] = { { 280, 150 }, { 300, 120 }, { 260, 190 }, { 320, 110 } };
+			const ArrowSpot spot = PinLayerArrowSpot(at, sizes, 4, arrowH);
+			Check(spot.at.x == 360 && spot.at.y == 120 && spot.pivotY == 1.0f, "the topmost pin is followed, the first on a tie", "topmost");
+		}
+
+		// A tile column and a cascade: the lead is the topmost.
+		{
+			const Point column[] = { { 1600, 100 }, { 1600, 256 }, { 1600, 382 } };
+			const Point cascade[] = { { 1500, 100 }, { 1520, 130 }, { 1540, 160 } };
+			const Size sizes[] = { { 280, 150 }, { 280, 120 }, { 280, 190 } };
+			const ArrowSpot a = PinLayerArrowSpot(column, sizes, 3, arrowH);
+			const ArrowSpot b = PinLayerArrowSpot(cascade, sizes, 3, arrowH);
+			Check(a.at.x == 1880 && a.at.y == 100, "a column: above the lead", "column");
+			Check(b.at.x == 1780 && b.at.y == 100, "a cascade: above the first", "cascade");
+		}
+
+		// Room for the arrow exactly: still above. A pixel short: under the lowest pin.
+		{
+			const Point exact[] = { { 400, arrowH } };
+			const Point tight[] = { { 400, arrowH - 1.0f } };
+			const Size sizes[] = { { 280, 150 } };
+			Check(PinLayerArrowSpot(exact, sizes, 1, arrowH).pivotY == 1.0f, "room for the arrow: above", "exact");
+			const ArrowSpot spot = PinLayerArrowSpot(tight, sizes, 1, arrowH);
+			Check(spot.pivotY == 0.0f && spot.at.x == 680 && spot.at.y == arrowH - 1.0f + 150.0f,
+				"no room above: under the pin, on its right edge", "tight");
+		}
+
+		// No room above: under the pin whose bottom is lowest (not the last, not the first).
+		{
+			const Point at[] = { { 10, 0 }, { 400, 20 }, { 800, 10 } };
+			const Size sizes[] = { { 100, 100 }, { 200, 300 }, { 150, 120 } };
+			const ArrowSpot spot = PinLayerArrowSpot(at, sizes, 3, arrowH);
+			Check(spot.pivotY == 0.0f && spot.at.x == 600 && spot.at.y == 320, "under the lowest pin", "lowest");
+		}
+
+		// The arrow is never over a pin's title bar when there is room above.
+		{
+			int checked = 0;
+			unsigned seed = 7u;
+			auto next = [&seed]() { seed = seed * 1664525u + 1013904223u; return static_cast<float>((seed >> 8) % 1000u); };
+			for (int round = 0; round < 500; ++round)
+			{
+				const int count = 1 + static_cast<int>(next()) % kMaxPins;
+				Point at[kMaxPins];
+				Size sizes[kMaxPins];
+				for (int k = 0; k < count; ++k)
+				{
+					at[k] = { next() * 1.5f, next() };
+					sizes[k] = { 100.0f + next() * 0.3f, 60.0f + next() * 0.3f };
+				}
+				const ArrowSpot spot = PinLayerArrowSpot(at, sizes, count, arrowH);
+				// The arrow sits wholly above every pin's top edge, or wholly below every pin's bottom edge.
+				bool clear = true;
+				for (int k = 0; k < count; ++k)
+				{
+					if (spot.pivotY == 1.0f)
+						clear = clear && spot.at.y <= at[k].y;
+					else
+						clear = clear && spot.at.y >= at[k].y + sizes[k].h;
+				}
+				// Above, it also stays on screen.
+				clear = clear && (spot.pivotY != 1.0f || spot.at.y - arrowH >= 0.0f);
+				Check(clear, "the arrow is wholly above the top pin or under the lowest", "round " + std::to_string(round));
+				++checked;
+			}
+			printf("  %d random layouts checked\n", checked);
+		}
+	}
+
 	printf("\n%d checks, %d failed\n", g_checks, g_failed);
 	return g_failed == 0 ? 0 : 1;
 }
