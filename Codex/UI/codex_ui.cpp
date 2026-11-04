@@ -139,7 +139,6 @@ namespace CodexUI
 
 		constexpr int kColumnFlagsWidthStretch = 1 << 3;
 		constexpr int kTabItemFlagsSetSelected = 1 << 1;
-		constexpr int kWindowFlagsAlwaysAutoResize = 1 << 6;
 		constexpr int kMouseCursorResizeAll = 2;
 
 		void OnEscapePressed(EModKey key, EModKeyEvent event);
@@ -1344,7 +1343,7 @@ namespace CodexUI
 
 		PinSettings g_pinSettings;
 
-		constexpr int kPinWindowFlags = kWindowFlagsAlwaysAutoResize | PluginWindowFlags_NoSavedSettings |
+		constexpr int kPinWindowFlags = PluginWindowFlags_AlwaysAutoResize | PluginWindowFlags_NoSavedSettings |
 			PluginWindowFlags_PauseMenuMouseInputs;
 
 		// Set when the lead pin has to be put back at its anchor: the layout
