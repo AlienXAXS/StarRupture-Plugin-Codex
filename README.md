@@ -11,6 +11,20 @@ loader the plugin shows "Needs loader" and stays off.
 
 ---
 
+## New in 1.0
+
+- **Pin and open recipes from the game's own menus** <sup>[✦](#msantoro12)</sup> -- in the
+  recipe station, the corporation terminal or a machine's menu, hover an item until the game
+  shows its tooltip, then **right-click** to pin the recipe that makes it, or
+  **Ctrl + right-click** to open it in the Planner. Inventory slots keep the game's own
+  right-click.
+- **Pins, your way** <sup>[✦](#msantoro12)</sup> -- pins are saved between sessions, tiled or
+  cascaded from the right, left or top edge, and dragged where you want them. Click the X on a
+  pin's title bar to unpin it. Pins can be moved and unpinned while the Esc menu or the Codex is
+  open, or while the cursor is up in a game menu.
+
+---
+
 ## Features
 
 - **Recipe search** -- press the configurable keybind (default `N`) to open a search box,
@@ -59,14 +73,14 @@ loader the plugin shows "Needs loader" and stays off.
   (`GamePinKey`) to pin the recipe that makes it. The new pin appears with the others. Only
   the item in the open tooltip is pinned, so nothing happens without one. It does nothing on
   an inventory slot's tooltip (your own inventory, or the one shown beside a machine), where
-  right-click is the game's own action. A `GamePinKey` you set earlier is kept.
+  right-click is the game's own action.
 - **Open in Planner from the game's menus** -- on the same tooltips, **Ctrl + right-click**
   (`GamePlannerKey`) opens the production planner for that item, exactly as the Planner button
   does (it uses the `Planner` choice). The same rules as the pin apply: only items a recipe
   makes, and not on inventory slots. A plain right-click still pins and does not also open the
   planner. Clear `GamePlannerKey` to turn the planner key off.
-- **Edit pins in the game's screens** -- pinned windows used to be clickable only with the
-  Codex or the Escape menu open. They are now also clickable and draggable while a game screen
+- **Edit pins in the game's screens** -- pinned windows are clickable and draggable with the
+  Codex or the Escape menu open, and while a game screen
   shows the mouse cursor: a machine's menu, the recipe station, the corporation terminal and
   the inventory. Click a pin's X to unpin it or drag a pin to move it there; a click on a pin
   is taken by the pin, and every other click goes to the game as before.
@@ -140,3 +154,7 @@ Found a bug? [Report it on GitHub](https://github.com/AlienXAXS/StarRupture-Plug
 Original mod by [@AlienXAXS](https://github.com/AlienXAXS).
 
 Maintained by [@msantoro12](https://github.com/msantoro12).
+
+Contributors:
+
+- <a id="msantoro12"></a><sup>✦</sup> [@msantoro12](https://github.com/msantoro12), creator of [StarRupture Planner](https://starrupture.goodstuff.software)

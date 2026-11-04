@@ -1,6 +1,8 @@
-- Right-click an item to pin the recipe that makes it, including from the game's own item tooltips
+- Right-click an item in the game's recipe station, corporation terminal or machine menus to pin the recipe that makes it
+- Ctrl+right-click the same item to open it in the Planner
 - Pinned recipes are saved and come back next time you play
 - Pins can be tiled or cascaded from any screen edge, dragged around, and stay on screen at any resolution
+- Click the X on a pin's title bar to unpin it; pins can be moved and unpinned while the Esc menu or the Codex is open, or the cursor is up in a game menu
 - Search with the Up and Down keys and Enter, and drag the search box where you like
 - Planner button opens the item in the StarRupture Planner
-- Needs the latest StarRupture Mod Loader
+- Needs ModLoader v1.23.0 or later
