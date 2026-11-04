@@ -2591,7 +2591,7 @@ namespace CodexUI
 		// MaterialIcons.md for the codepoints).
 		constexpr const char* kIconClose    = ""; // U+E5CD close
 		constexpr const char* kIconCollapse = ""; // U+E931 minimize
-		constexpr const char* kIconExpand   = ""; // U+E3C6 crop_square
+		constexpr const char* kIconExpand   = ""; // U+E5CF expand_more
 
 		enum class TitleGlyph { Close, Collapse, Expand };
 

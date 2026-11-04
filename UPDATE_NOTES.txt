@@ -3,7 +3,7 @@
 - Pinned recipes are saved and come back next time you play
 - Pins can be tiled or cascaded from any screen edge, dragged around, and stay on screen at any resolution
 - Click the X on a pin's title bar to unpin it; pins can be moved and unpinned while the Esc menu or the Codex is open, or the cursor is up in a game menu
-- Click the minimize button left of a pin's X to collapse it to its title bar (it shows a square while collapsed; click again to open it); each pin remembers its state
+- Click the minimize button left of a pin's X to collapse it to its title bar (it shows a down chevron (v) while collapsed; click again to open it); each pin remembers its state
 - Hold Ctrl: Ctrl+X closes every pin, and Ctrl+minimize collapses every pin, or opens them all when all are collapsed
 - Search with the Up and Down keys and Enter, and drag the search box where you like
 - Planner button opens the item in the StarRupture Planner
