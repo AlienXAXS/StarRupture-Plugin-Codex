@@ -2589,9 +2589,9 @@ namespace CodexUI
 
 		// The title buttons' glyphs, from the loader's Material Icons font (see its
 		// MaterialIcons.md for the codepoints).
-		constexpr const char* kIconClose    = ""; // U+E5CD close
-		constexpr const char* kIconCollapse = ""; // U+E931 minimize
-		constexpr const char* kIconExpand   = ""; // U+E5CF expand_more
+		constexpr const char* kIconClose    = "\xEE\x97\x8D"; // U+E5CD close
+		constexpr const char* kIconCollapse = "\xEE\xA4\xB1"; // U+E931 minimize
+		constexpr const char* kIconExpand   = "\xEE\x97\x8F"; // U+E5CF expand_more
 
 		enum class TitleGlyph { Close, Collapse, Expand };
 
