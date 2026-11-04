@@ -1,4 +1,4 @@
-- Right-click an item to pin the recipe that makes it
+- Right-click an item to pin the recipe that makes it, including from the game's own item tooltips
 - Pinned recipes are saved and come back next time you play
 - Pins can be tiled or cascaded from any screen edge, dragged around, and stay on screen at any resolution
 - Search with the Up and Down keys and Enter, and drag the search box where you like
