@@ -32,6 +32,15 @@ loader the plugin shows "Needs loader" and stays off.
   "all" appears before the buttons: **Ctrl + X** closes every pin, and the button shows what a click will do: **Ctrl + the button** collapses
   every pin, or opens them all (a square) when every pin is already collapsed.
 
+- **Pins under menus** <sup>[✦](#msantoro12)</sup> -- while any game menu is open (the Escape menu, a machine's
+  screen, the build menu and the rest), a small arrow button appears just above the top pinned
+  card, or under the pins when there is no room above. It controls all pins together. The **down
+  arrow** sends the pins below the menu: they stay visible but stop taking clicks, so the menu
+  underneath can be used, the same way the WAILA card behaves under menus. The arrow then turns
+  into an **up arrow**, which brings them back on top. The arrow itself always stays on top and
+  clickable. The choice lasts for the session, so it stays set the next time a menu opens, and
+  resets when the game restarts. During plain gameplay the pins behave as before.
+
 ---
 
 ## Features
