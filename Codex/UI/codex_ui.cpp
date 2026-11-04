@@ -21,7 +21,6 @@
 #include <cstdlib>
 #include <cstring>
 #include <mutex>
-#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -1356,38 +1355,29 @@ namespace CodexUI
 		constexpr int kPinWindowFlags = PluginWindowFlags_AlwaysAutoResize | PluginWindowFlags_NoSavedSettings |
 			PluginWindowFlags_PauseMenuMouseInputs;
 
-		// What the pin cards carry while they are below the game's menu: the same
-		// without the opt-in to the mouse over a menu, so clicks go through them
-		// to the menu, as they do through WAILA's card.
-		// They also lose ImGui's own window background (the render paints a faint
-		// one by hand) and are drawn at kPinBelowAlpha, as WAILA's card is.
-		constexpr int kPinBelowFlags = (kPinWindowFlags & ~PluginWindowFlags_PauseMenuMouseInputs) |
-			PluginWindowFlags_NoBackground;
-
-		// How strongly a pin card shows while it is below the menu, for its
-		// background and for everything on it.
-		constexpr float kPinBelowAlpha = 0.35f;
-
 		// A card held at a fixed height shows no scrollbar and ignores the mouse
 		// wheel (ImGuiWindowFlags_NoScrollWithMouse, which the SDK has no name for).
 		constexpr int kPinHeldFlags = PluginWindowFlags_NoScrollbar | (1 << 4);
 
-		// The pin layer arrow: one button above the pins that sends them below the
-		// game's menu and back (see CodexPinLayout::PinLayerNow). It is a widget of
-		// its own that keeps the mouse over a menu, so it stays clickable while the
-		// pins are not.
+		// The pin layer arrow: one button above the pins that tucks them into itself
+		// and brings them back out (see CodexPinLayout::PinLayerNow). It is a widget
+		// of its own, so it stays up and clickable while the pins are tucked away.
 		WidgetHandle      g_layerWidget = nullptr;
 		PluginWindowHints g_layerHints{};
 		PluginWidgetDesc  g_layerDesc{};
 		bool              g_layerShown = false; // the widget's visibility as last set
 
-		// The player's choice, kept for the session. It is written by the arrow's
-		// click and read by the pins' render, so it is atomic.
-		std::atomic<bool> g_pinsBelow{ false };
+		// The player's choice, kept for the session; it takes effect only while a
+		// game menu is up. It is written by the arrow's click, so it is atomic.
+		std::atomic<bool> g_pinsTucked{ false };
 
-		// This frame, the pins are below: set from the first pin's render, read by
-		// the others. Render thread only.
-		bool g_pinsDropped = false;
+		// How far the pins have tucked into the arrow: 0 = out, as they are
+		// drawn, 1 = in. The pins' windows are hidden while it is above 0 and the
+		// arrow draws the cards shrinking. Render thread only.
+		float g_tuckT = 0.0f;
+
+		// The arrow and the tuck, as of the last UpdatePinLayer.
+		CodexPinLayout::PinLayerState g_layerState;
 
 		void SetPinLayerArrowShown(bool shown)
 		{
@@ -1438,7 +1428,8 @@ namespace CodexUI
 		// Arrange), a pin whose spot changes glides instead of jumping.
 		constexpr float kPinGlideWindow = 0.4f;
 
-		// How long a pin takes to collapse to its title bar or open back up.
+		// How long a pin takes to collapse to its title bar or open back up, and
+		// to tuck into the layer arrow or come back out of it.
 		constexpr float kCollapseSeconds = 0.15f;
 		float  g_pinGlideWindow = 0.0f;
 		double g_pinLastTime = 0.0;
@@ -1894,6 +1885,44 @@ namespace CodexUI
 			g_pinGlideWindow = (std::max)(0.0f, g_pinGlideWindow - g_pinDeltaTime);
 		}
 
+		// Hides the pins' windows while they are tucked into the layer arrow, and
+		// shows them again where they were. A window that is not shown is not
+		// rendered, so nothing of the pins is left on the menu and the layout
+		// below stands still until they are back.
+		void SetPinsHidden(bool hidden)
+		{
+			if (hidden)
+				CancelPinGlides(); // each pin is put at the spot it is heading for
+			g_pinGrab.pending = false;
+
+			const int count = PinCount();
+			for (int k = 0; k < count; ++k)
+			{
+				PinSlot& pin = g_pins[k];
+				pin.dragging = false;
+				// Back at its last spot, if no placement is already asked for.
+				if (!hidden && pin.rect.valid && pin.hints.pos_x < 0.0f)
+				{
+					pin.hints.pos_x = pin.rect.x;
+					pin.hints.pos_y = pin.rect.y;
+				}
+				if (g_self && g_self->hooks->UI && pin.widget)
+					g_self->hooks->UI->SetWidgetVisible(pin.widget, !hidden);
+			}
+		}
+
+		// Brings tucked pins straight back out and drops the player's tuck, for a
+		// change to the pins that the tucked ones cannot show (a pin added or removed).
+		void UntuckNow()
+		{
+			g_pinsTucked.store(false, std::memory_order_relaxed);
+			if (g_tuckT > 0.0f)
+			{
+				g_tuckT = 0.0f;
+				SetPinsHidden(false);
+			}
+		}
+
 		// Advances every glide and asks for the window at its eased spot, once
 		// the layout has set this frame's targets. Only the target is ever saved.
 		void StepPinGlides()
@@ -2284,7 +2313,7 @@ namespace CodexUI
 			}
 
 			const float bar = imgui->GetFrameHeight();
-			const float ease = slot.collapseT * slot.collapseT * (3.0f - 2.0f * slot.collapseT);
+			const float ease = CodexPinLayout::CollapseEase(slot.collapseT);
 			slot.hints.width = 0.0f; // sizes itself to its content
 			// A window is never shorter than its title bar, so a collapsed card asks
 			// for less than that and ImGui keeps exactly the title bar. ImGui also
@@ -2360,6 +2389,7 @@ namespace CodexUI
 			if (index >= kMaxPins || !g_pins[index].widget)
 				return;
 
+			UntuckNow();
 			PinSlot& slot = g_pins[index];
 			slot.nativeRecipe = nativeRecipe;
 			slot.recipeKey = info.key;
@@ -2465,6 +2495,7 @@ namespace CodexUI
 			const int count = PinCount();
 			if (index >= count)
 				return;
+			UntuckNow();
 			for (int k = index; k + 1 < count; ++k)
 			{
 				CodexRecipes::RecipeInfo info;
@@ -2530,7 +2561,6 @@ namespace CodexUI
 			if (count == 1)
 			{
 				CodexTooltipPin::WatchPinMenus(false);
-				g_pinsDropped = false;
 				SetPinLayerArrowShown(false);
 			}
 			if (persist)
@@ -2621,7 +2651,7 @@ namespace CodexUI
 		// ImGui's ImGuiCol_ indices for the close button's colors.
 		constexpr int kColText          = 0;
 		constexpr int kColWindowBg      = 2;
-		constexpr int kStyleVarAlpha    = 0; // ImGuiStyleVar_Alpha
+		constexpr int kColBorder        = 5;
 		constexpr int kColButtonHovered = 22;
 		constexpr int kColButtonActive  = 23;
 
@@ -2825,26 +2855,17 @@ namespace CodexUI
 				|| (hooks->UI && hooks->UI->IsOverlayOpen());
 		}
 
-		// The first pin's render: works out whether the arrow shows and the pins are
-		// below the menu this frame. The menus are the loader's UI state bits, as
-		// of its last game tick.
+		// Works out whether the arrow shows and the pins are tucked this frame; run
+		// by the first pin's render and by the arrow's own. The menus are the
+		// loader's UI state bits, as of its last game tick.
 		void UpdatePinLayer()
 		{
 			// The loader reads the menu bits only while a pin is up.
 			CodexTooltipPin::WatchPinMenus(PinCount() > 0);
 			const bool menuUp = CodexTooltipPin::PinLayerMenuUp(CodexTooltipPin::UIState());
-			const CodexPinLayout::PinLayerState now = CodexPinLayout::PinLayerNow(
-				PinCount(), g_pinsBelow.load(std::memory_order_relaxed), menuUp, g_layerWidget != nullptr);
-
-			// A press on a card that was about to take the mouse is not the start of a drag.
-			if (now.pinsBelow != g_pinsDropped)
-			{
-				g_pinsDropped = now.pinsBelow;
-				for (PinSlot& pin : g_pins)
-					pin.dragging = false;
-				g_pinGrab.pending = false;
-			}
-			SetPinLayerArrowShown(now.arrowShown);
+			g_layerState = CodexPinLayout::PinLayerNow(
+				PinCount(), g_pinsTucked.load(std::memory_order_relaxed), menuUp, g_layerWidget != nullptr);
+			SetPinLayerArrowShown(g_layerState.arrowShown);
 		}
 
 		// What a pinned window shows below its title bar.
@@ -2948,8 +2969,7 @@ namespace CodexUI
 			// follower. Ungrouped: every pin is dragged on its own.
 			const bool follower = !g_pinSettings.free && index != 0;
 			StepCollapse(imgui, slot, winH);
-			const int cardFlags = g_pinsDropped ? kPinBelowFlags : kPinWindowFlags;
-			int windowFlags = slot.sizedFixed ? cardFlags | kPinHeldFlags : cardFlags;
+			int windowFlags = slot.sizedFixed ? kPinWindowFlags | kPinHeldFlags : kPinWindowFlags;
 			if (follower)
 				windowFlags |= PluginWindowFlags_NoMove;
 			slot.hints.extra_window_flags = windowFlags;
@@ -2994,25 +3014,6 @@ namespace CodexUI
 			if (index == 0)
 				StepPinGlides();
 
-			// Below the menu the card is faint: its background is painted here at the
-			// reduced alpha (the window has none of its own), and the style's alpha
-			// covers everything drawn after it, up to the end of this render.
-			struct BelowAlpha
-			{
-				IModLoaderImGui* imgui;
-				explicit BelowAlpha(IModLoaderImGui* ui) : imgui(ui) { imgui->PushStyleVarFloat(kStyleVarAlpha, kPinBelowAlpha); }
-				~BelowAlpha() { imgui->PopStyleVar(1); }
-			};
-			std::optional<BelowAlpha> belowAlpha;
-			if (g_pinsDropped)
-			{
-				if (slot.rect.valid)
-					imgui->DL_AddRectFilled(imgui->GetWindowDrawList(), slot.rect.x, slot.rect.y,
-						slot.rect.x + slot.rect.w, slot.rect.y + slot.rect.h,
-						imgui->GetColorU32FromCol(kColWindowBg, kPinBelowAlpha), 0.0f, 0);
-				belowAlpha.emplace(imgui);
-			}
-
 			const bool interactive = PinsEditable(imgui);
 			const bool ctrl = interactive && CtrlHeld();
 
@@ -3050,9 +3051,9 @@ namespace CodexUI
 		constexpr auto kPinRenderFns = MakePinRenderFns(std::make_integer_sequence<int, kMaxPins>{});
 
 		// The arrow's glyphs, from the loader's Material Icons font.
-		constexpr const char* kIconLayerDown = "\xEE\x89\x98"; // U+E258 vertical_align_bottom: the pins are above, a click sends them below
-		constexpr const char* kIconLayerUp   = "\xEE\x89\x9A"; // U+E25A vertical_align_top: the pins are below, a click brings them back
-		constexpr IconInk     kInkLayer      = { 64.0f, 448.0f }; // both
+		constexpr const char* kIconTuck   = "\xEE\xAB\x8F"; // U+EACF keyboard_double_arrow_up: the pins are out, a click tucks them in
+		constexpr const char* kIconUntuck = "\xEE\xAB\x90"; // U+EAD0 keyboard_double_arrow_down: the pins are tucked, a click brings them out
+		constexpr IconInk     kInkTuck    = { 107.0f, 405.0f }; // both
 
 		// How far the arrow's window sits from the pin it is beside, less than the
 		// theme's ItemSpacing: the window's own padding (WindowPadding) is between
@@ -3061,9 +3062,51 @@ namespace CodexUI
 		// button and the pin.
 		float g_layerGapCloser = 0.0f;
 
+		// Moves the tuck on one frame towards the player's choice. The pins' windows
+		// are hidden from the first step in until the last step out; outside a game
+		// menu the pins are out at once, whatever was chosen.
+		void StepTuck(bool tucked)
+		{
+			float t = g_tuckT;
+			if (!g_layerState.arrowShown)
+				t = 0.0f;
+			else
+			{
+				const float step = g_pinDeltaTime / kCollapseSeconds;
+				t = tucked ? (std::min)(1.0f, t + step) : (std::max)(0.0f, t - step);
+			}
+			if ((t > 0.0f) != (g_tuckT > 0.0f))
+				SetPinsHidden(t > 0.0f);
+			g_tuckT = t;
+		}
+
+		// While the pins are on their way in or out, each is a card, as wide and
+		// high as the pin was, shrinking into the arrow's button or growing out of
+		// it. It is drawn behind the arrow's window, so the button stays on top.
+		void DrawTuckingCards(IModLoaderImGui* imgui, const CodexPinLayout::Rect& button)
+		{
+			const PluginDrawList dl = imgui->GetBackgroundDrawList();
+			const unsigned int fill = imgui->GetColorU32FromCol(kColWindowBg, 1.0f);
+			const unsigned int border = imgui->GetColorU32FromCol(kColBorder, 1.0f);
+			for (int k = 0; k < PinCount(); ++k)
+			{
+				const PinRect& pin = g_pins[k].rect;
+				if (!pin.valid)
+					continue;
+				const CodexPinLayout::Rect card = CodexPinLayout::TuckRectAt({ pin.x, pin.y, pin.w, pin.h }, button, g_tuckT);
+				imgui->DL_AddRectFilled(dl, card.x, card.y, card.x + card.w, card.y + card.h, fill, 0.0f, 0);
+				imgui->DL_AddRect(dl, card.x, card.y, card.x + card.w, card.y + card.h, border, 0.0f, 0, 1.0f);
+			}
+		}
+
 		// The arrow's window, put on the right edge of the top pin for the next frame.
 		void RenderPinLayerArrow(IModLoaderImGui* imgui)
 		{
+			// With the pins tucked away their windows do not run the frame's setup.
+			if (g_tuckT > 0.0f)
+				AdvancePinClock(imgui);
+			UpdatePinLayer();
+
 			float winX = 0.0f, winY = 0.0f, winW = 0.0f, winH = 0.0f;
 			imgui->GetWindowPos(&winX, &winY);
 			imgui->GetWindowSize(&winW, &winH);
@@ -3094,7 +3137,6 @@ namespace CodexUI
 				g_layerHints.pivot_y = spot.pivotY;
 			}
 
-			const bool below = g_pinsBelow.load(std::memory_order_relaxed);
 			// A button of its own size with the icon drawn over it, so the glyph is
 			// centred by its ink.
 			const float frameH = imgui->GetFrameHeight();
@@ -3102,16 +3144,25 @@ namespace CodexUI
 			float minX = 0.0f, minY = 0.0f, maxX = 0.0f, maxY = 0.0f;
 			imgui->GetItemRectMin(&minX, &minY);
 			imgui->GetItemRectMax(&maxX, &maxY);
-			DrawIconCentred(imgui, imgui->GetWindowDrawList(), below ? kIconLayerUp : kIconLayerDown, kInkLayer,
+			const bool hovered = imgui->IsItemHovered();
+			if (clicked)
+				g_pinsTucked.store(!g_pinsTucked.load(std::memory_order_relaxed), std::memory_order_relaxed);
+			const bool tucked = g_pinsTucked.load(std::memory_order_relaxed);
+			DrawIconCentred(imgui, imgui->GetWindowDrawList(), tucked ? kIconUntuck : kIconTuck, kInkTuck,
 				(minX + maxX) * 0.5f, (minY + maxY) * 0.5f);
 			// The cursor is now one ItemSpacing below the button.
 			float afterX = 0.0f, afterY = 0.0f;
 			imgui->GetCursorScreenPos(&afterX, &afterY);
 			g_layerGapCloser = windowPadY - (afterY - maxY);
-			if (clicked)
-				g_pinsBelow.store(!below, std::memory_order_relaxed);
-			if (imgui->IsItemHovered())
-				imgui->SetTooltip(below ? "Bring the pins back above the menu." : "Send the pins below the menu.");
+			if (hovered)
+				imgui->SetTooltip(tucked ? "Bring the pins back out." : "Tuck the pins into this button.");
+
+			// The frame the pins show again is drawn too, so they take over from the
+			// cards without a gap.
+			const bool wasTucking = g_tuckT > 0.0f;
+			StepTuck(tucked);
+			if ((wasTucking || g_tuckT > 0.0f) && g_tuckT < 1.0f)
+				DrawTuckingCards(imgui, { minX, minY, maxX - minX, maxY - minY });
 		}
 
 		void RegisterPinLayerArrow(IPluginSelf* self)
@@ -3140,7 +3191,7 @@ namespace CodexUI
 
 		void UnregisterPinLayerArrow(IPluginSelf* self)
 		{
-			g_pinsDropped = false;
+			g_tuckT = 0.0f;
 			g_layerShown = false;
 			if (g_layerWidget)
 			{

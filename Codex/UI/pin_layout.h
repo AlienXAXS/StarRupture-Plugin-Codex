@@ -490,25 +490,50 @@ namespace CodexPinLayout
 		return end == text ? kGapDefault : static_cast<int>(std::clamp(value, static_cast<long>(kGapMin), static_cast<long>(kGapMax)));
 	}
 
-	// The pin layer arrow: one button over the pins that sends them below the
-	// game's menu (they stop taking the mouse, as WAILA's card does) and brings
-	// them back.
+	// The pin layer arrow: one button over the pins that tucks them into itself
+	// and brings them back out.
 	//
-	// It shows while a game menu is up and a pin is, and the pins are below
-	// only then, so they are never click-through where the arrow is not.
+	// It shows while a game menu is up and a pin is, and the pins are tucked
+	// only then, so in plain gameplay they show as normal.
 	// `arrowAvailable` is false when the arrow's window could not be made.
 	struct PinLayerState
 	{
 		bool arrowShown = false;
-		bool pinsBelow = false;
+		bool pinsTucked = false;
 	};
 
-	inline PinLayerState PinLayerNow(int pinCount, bool belowSet, bool menuUp, bool arrowAvailable)
+	inline PinLayerState PinLayerNow(int pinCount, bool tuckSet, bool menuUp, bool arrowAvailable)
 	{
 		PinLayerState state;
 		state.arrowShown = arrowAvailable && menuUp && pinCount > 0;
-		state.pinsBelow = state.arrowShown && belowSet;
+		state.pinsTucked = state.arrowShown && tuckSet;
 		return state;
+	}
+
+	// The ease of a collapse: slow at both ends, 0 at t = 0, 1 at t = 1. A pin
+	// collapsing to its title bar and a pin tucking into the arrow share it.
+	inline float CollapseEase(float t)
+	{
+		const float u = std::clamp(t, 0.0f, 1.0f);
+		return u * u * (3.0f - 2.0f * u);
+	}
+
+	// A pin's card as a rectangle, and where it is `t` of the way (0 to 1,
+	// eased by CollapseEase) from `from` into `into`: its corner and size both
+	// move, so the card shrinks into the arrow's button and grows back out.
+	struct Rect
+	{
+		float x = 0.0f;
+		float y = 0.0f;
+		float w = 0.0f;
+		float h = 0.0f;
+	};
+
+	inline Rect TuckRectAt(Rect from, Rect into, float t)
+	{
+		const float e = CollapseEase(t);
+		return { from.x + (into.x - from.x) * e, from.y + (into.y - from.y) * e,
+			from.w + (into.w - from.w) * e, from.h + (into.h - from.h) * e };
 	}
 
 	// Where the arrow's window goes: its corner (with the pivot to match, the

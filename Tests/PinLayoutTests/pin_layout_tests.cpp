@@ -1135,22 +1135,61 @@ int main()
 
 	printf("pin layer arrow\n");
 	{
-		// Shown while a menu is up and a pin is; the pins are below only then.
+		// Shown while a menu is up and a pin is; the pins are tucked only then.
 		int states = 0;
 		for (int pins = 0; pins <= kMaxPins; ++pins)
-			for (int below = 0; below <= 1; ++below)
+			for (int tuck = 0; tuck <= 1; ++tuck)
 				for (int menu = 0; menu <= 1; ++menu)
 					for (int available = 0; available <= 1; ++available)
 					{
-						const PinLayerState s = PinLayerNow(pins, below != 0, menu != 0, available != 0);
-						const std::string where = std::to_string(pins) + " pins, below " + std::to_string(below) +
+						const PinLayerState s = PinLayerNow(pins, tuck != 0, menu != 0, available != 0);
+						const std::string where = std::to_string(pins) + " pins, tuck " + std::to_string(tuck) +
 							", menu " + std::to_string(menu) + ", available " + std::to_string(available);
 						Check(s.arrowShown == (pins > 0 && menu && available), "the arrow shows with a pin and a menu up", where);
-						Check(s.pinsBelow == (s.arrowShown && below), "the pins are below only while the arrow shows and below is set", where);
-						Check(!s.pinsBelow || s.arrowShown, "pins are never below without the arrow", where);
+						Check(s.pinsTucked == (s.arrowShown && tuck), "the pins are tucked only while the arrow shows and the tuck is set", where);
+						Check(!s.pinsTucked || s.arrowShown, "pins are never tucked without the arrow", where);
 						++states;
 					}
 		printf("  %d states checked\n", states);
+
+		// The collapse ease: 0 to 1, slow at both ends, never outside them.
+		Check(CollapseEase(0.0f) == 0.0f && CollapseEase(1.0f) == 1.0f, "the ease runs from 0 to 1", "ease ends");
+		Check(CollapseEase(-1.0f) == 0.0f && CollapseEase(2.0f) == 1.0f, "the ease is held at its ends", "ease clamp");
+		Check(std::fabs(CollapseEase(0.5f) - 0.5f) < 1e-6f, "the ease is half way at half time", "ease mid");
+		{
+			float last = 0.0f;
+			bool rising = true;
+			for (int k = 1; k <= 100; ++k)
+			{
+				const float e = CollapseEase(static_cast<float>(k) / 100.0f);
+				rising = rising && e >= last;
+				last = e;
+			}
+			Check(rising, "the ease never goes back", "ease monotone");
+			Check(CollapseEase(0.1f) < 0.1f && CollapseEase(0.9f) > 0.9f, "the ease is slow at the ends", "ease shape");
+		}
+
+		// A card tucking into the arrow's button: its corner and size both move.
+		{
+			const Rect card = { 400.0f, 200.0f, 280.0f, 150.0f };
+			const Rect button = { 690.0f, 170.0f, 28.0f, 28.0f };
+			const Rect start = TuckRectAt(card, button, 0.0f);
+			const Rect end = TuckRectAt(card, button, 1.0f);
+			Check(start.x == card.x && start.y == card.y && start.w == card.w && start.h == card.h, "a tuck starts at the card", "tuck start");
+			Check(end.x == button.x && end.y == button.y && end.w == button.w && end.h == button.h, "a tuck ends at the button", "tuck end");
+			const Rect mid = TuckRectAt(card, button, 0.5f);
+			Check(std::fabs(mid.x - 545.0f) < 1e-3f && std::fabs(mid.y - 185.0f) < 1e-3f &&
+				std::fabs(mid.w - 154.0f) < 1e-3f && std::fabs(mid.h - 89.0f) < 1e-3f, "half way is the middle of both rectangles", "tuck mid");
+			const Rect before = TuckRectAt(card, button, -3.0f);
+			const Rect after = TuckRectAt(card, button, 3.0f);
+			Check(before.w == card.w && after.w == button.w, "the progress is held between 0 and 1", "tuck clamp");
+
+			// Coming back out is the same path the other way.
+			const Rect in = TuckRectAt(card, button, 0.3f);
+			const Rect out = TuckRectAt(button, card, 0.7f);
+			Check(std::fabs(in.x - out.x) < 1e-3f && std::fabs(in.w - out.w) < 1e-3f && std::fabs(in.h - out.h) < 1e-3f,
+				"growing out retraces the way in", "tuck reverse");
+		}
 
 		const float arrowH = 30.0f;
 		const float screenW = 1920.0f;
