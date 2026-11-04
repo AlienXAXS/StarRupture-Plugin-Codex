@@ -36,6 +36,7 @@ namespace CodexRecipes
 	struct RecipeInfo
 	{
 		void*       nativeRecipe = nullptr; // SDK::UCrItemRecipeData* identity key - stable for the session
+		std::string key;                    // the recipe asset's name: stable across sessions and game updates, unlike nativeRecipe
 		std::string displayName;
 		std::string buildingName;           // label of the lowest-tier building that crafts this recipe
 		std::vector<BuildingRef> buildings; // every building that crafts it, lowest tier first
@@ -97,4 +98,7 @@ namespace CodexRecipes
 
 	// Finds a recipe by its native identity pointer (RecipeInfo::nativeRecipe).
 	bool FindByNativeRecipe(void* nativeRecipe, RecipeInfo& outRecipe);
+
+	// Finds a recipe by its asset name (RecipeInfo::key), as saved between sessions.
+	bool FindByKey(const std::string& key, RecipeInfo& outRecipe);
 }

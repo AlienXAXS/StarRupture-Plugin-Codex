@@ -27,6 +27,11 @@
       <UniqueIdentifier>{a1b2c3d4-0001-0001-0001-000000000005}</UniqueIdentifier>
     </Filter>
 
+    <!-- Launch planner button (item id mapping + URL building) -->
+    <Filter Include="Planner">
+      <UniqueIdentifier>{a1b2c3d4-0001-0001-0001-000000000007}</UniqueIdentifier>
+    </Filter>
+
     <!-- Codex search box + recipe detail UI -->
     <Filter Include="UI">
       <UniqueIdentifier>{a1b2c3d4-0001-0001-0001-000000000006}</UniqueIdentifier>
@@ -69,8 +74,16 @@
       <Filter>Recipes</Filter>
     </ClInclude>
 
+    <!-- Planner -->
+    <ClInclude Include="Planner\codex_planner.h">
+      <Filter>Planner</Filter>
+    </ClInclude>
+
     <!-- UI -->
     <ClInclude Include="UI\codex_ui.h">
+      <Filter>UI</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\game_tooltip_pin.h">
       <Filter>UI</Filter>
     </ClInclude>
 
@@ -109,8 +122,16 @@
       <Filter>Recipes</Filter>
     </ClCompile>
 
+    <!-- Planner -->
+    <ClCompile Include="Planner\codex_planner.cpp">
+      <Filter>Planner</Filter>
+    </ClCompile>
+
     <!-- UI -->
     <ClCompile Include="UI\codex_ui.cpp">
+      <Filter>UI</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\game_tooltip_pin.cpp">
       <Filter>UI</Filter>
     </ClCompile>
 
@@ -125,6 +146,15 @@
       <Filter>SDK</Filter>
     </ClCompile>
     <ClCompile Include="$(StarRuptureSDKSourceDir)AuCrafting_functions.cpp">
+      <Filter>SDK</Filter>
+    </ClCompile>
+    <ClCompile Include="$(StarRuptureSDKSourceDir)UMG_functions.cpp">
+      <Filter>SDK</Filter>
+    </ClCompile>
+    <ClCompile Include="$(StarRuptureSDKSourceDir)ChimeraUI_functions.cpp">
+      <Filter>SDK</Filter>
+    </ClCompile>
+    <ClCompile Include="$(StarRuptureSDKSourceDir)WBP_ActionButton_functions.cpp">
       <Filter>SDK</Filter>
     </ClCompile>
 

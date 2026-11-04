@@ -1,5 +1,6 @@
 #include "codex_icons.h"
 #include "Plugin Core/Helpers/plugin_helpers.h"
+#include "Plugin Core/codex_fields.h"
 
 #include "Chimera_classes.hpp"
 #include "AuItems_classes.hpp"
@@ -98,7 +99,8 @@ namespace CodexIcons
 		// storage.
 		SDK::UTexture2D* GetItemIconResource(SDK::UAuItemDataBase* item)
 		{
-			return item ? reinterpret_cast<SDK::UTexture2D*>(item->ItemIcon.ResourceObject) : nullptr;
+			const auto* brush = CodexFields::ItemIcon.In(item);
+			return brush ? reinterpret_cast<SDK::UTexture2D*>(brush->ResourceObject) : nullptr;
 		}
 
 		// Every item type is defined as a Blueprint (UAuItemBlueprint asset whose
@@ -289,7 +291,7 @@ namespace CodexIcons
 						if (!item)
 							continue;
 
-						const std::string uniqueName = item->UniqueItemName.ToString();
+						const std::string uniqueName = CodexFields::UniqueNameOf(item);
 						if (uniqueName.empty())
 							continue;
 
@@ -424,5 +426,11 @@ namespace CodexIcons
 	{
 		auto it = g_icons.find(uniqueItemName);
 		return it != g_icons.end() ? it->second.handle : nullptr;
+	}
+
+	const void* GetIconTexture(const std::string& uniqueItemName)
+	{
+		auto it = g_icons.find(uniqueItemName);
+		return it != g_icons.end() ? it->second.icon : nullptr;
 	}
 }
