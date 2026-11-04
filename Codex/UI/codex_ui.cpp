@@ -2624,9 +2624,9 @@ namespace CodexUI
 
 		// The title buttons' glyphs, from the loader's Material Icons font (see its
 		// MaterialIcons.md for the codepoints).
-		constexpr const char* kIconClose    = ""; // U+E5CD close
-		constexpr const char* kIconCollapse = ""; // U+E931 minimize
-		constexpr const char* kIconExpand   = ""; // U+E3C6 crop_square
+		constexpr const char* kIconClose    = "\xEE\x97\x8D"; // U+E5CD close
+		constexpr const char* kIconCollapse = "\xEE\xA4\xB1"; // U+E931 minimize
+		constexpr const char* kIconExpand   = "\xEE\x97\x8F"; // U+E5CF expand_more
 
 		enum class TitleGlyph { Close, Collapse, Expand };
 
@@ -2955,8 +2955,8 @@ namespace CodexUI
 		constexpr auto kPinRenderFns = MakePinRenderFns(std::make_integer_sequence<int, kMaxPins>{});
 
 		// The arrow's glyphs, from the loader's Material Icons font.
-		constexpr const char* kIconLayerDown = "\xEE\x97\x9B"; // U+E5DB arrow_downward: the pins are above, a click sends them below
-		constexpr const char* kIconLayerUp   = "\xEE\x97\x98"; // U+E5D8 arrow_upward: the pins are below, a click brings them back
+		constexpr const char* kIconLayerDown = "\xEE\x89\x98"; // U+E258 vertical_align_bottom: the pins are above, a click sends them below
+		constexpr const char* kIconLayerUp   = "\xEE\x89\x9A"; // U+E25A vertical_align_top: the pins are below, a click brings them back
 
 		// The arrow's window, put on the right edge of the top pin for the next frame.
 		void RenderPinLayerArrow(IModLoaderImGui* imgui)

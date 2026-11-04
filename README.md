@@ -27,10 +27,10 @@ loader the plugin shows "Needs loader" and stays off.
   open, or while the cursor is up in a game menu.
 
 - **Collapse pins** <sup>[✦](#msantoro12)</sup> -- click the minimize button (a dash) left of the X on a pinned
-  recipe to fold it down to its title bar; it becomes a square while collapsed, and clicking it again opens the pin. It eases open and shut in a
+  recipe to fold it down to its title bar; it becomes a down chevron (v) while collapsed, and clicking it again opens the pin. It eases open and shut in a
   fraction of a second, and each pin remembers its state between sessions. Hold **Ctrl** and
   "all" appears before the buttons: **Ctrl + X** closes every pin, and the button shows what a click will do: **Ctrl + the button** collapses
-  every pin, or opens them all (a square) when every pin is already collapsed.
+  every pin, or opens them all (a down chevron) when every pin is already collapsed.
 
 ---
 
