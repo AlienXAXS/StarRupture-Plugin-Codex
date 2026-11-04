@@ -64,6 +64,10 @@ namespace CodexUI
 		// whether or not the pins are up yet. Render thread only.
 		std::vector<std::string> g_savedPins;
 
+		// Which pins are saved as collapsed, one '1' or '0' per pin in pin order
+		// (the PinCollapsed value as last read or written), kept for the same reason.
+		std::string g_savedCollapsed;
+
 		void* g_inputCaptureToken = nullptr;
 		bool  g_escapeRegistered = false;
 
@@ -1310,6 +1314,10 @@ namespace CodexUI
 			PinGlide          glide;                // easing to a new spot on its own
 			bool              fresh = false;        // just pinned: its first spot is taken at once, not eased to
 			bool              restoring = false;    // ungrouped: a saved pin, back at its saved spot rather than a new pin's
+			bool              collapsed = false;    // asked to be only its title bar (saved with the pin)
+			float             collapseT = 1.0f;     // 1 = the whole card, 0 = the title bar; eased towards `collapsed`
+			float             fullH = 0.0f;         // the whole card's height, measured while it is up
+			bool              sizedFixed = false;   // the window's height is held (easing or collapsed), not sized to its content
 		};
 
 		PinSlot  g_pins[kMaxPins];
@@ -1386,6 +1394,9 @@ namespace CodexUI
 		// such a move was set off (a pin added or removed, a layout switch, Clear,
 		// Arrange), a pin whose spot changes glides instead of jumping.
 		constexpr float kPinGlideWindow = 0.4f;
+
+		// How long a pin takes to collapse to its title bar or open back up.
+		constexpr float kCollapseSeconds = 0.15f;
 		float  g_pinGlideWindow = 0.0f;
 		double g_pinLastTime = 0.0;
 		float  g_pinDeltaTime = 0.0f;
@@ -1399,6 +1410,9 @@ namespace CodexUI
 		// One saved pin's key: the config holds a value of up to this many
 		// characters, and an asset name takes a fraction of it.
 		constexpr int kPinKeyBufferSize = static_cast<int>(CodexPinSet::kMaxValueLen) + 1;
+
+		// The PinCollapsed value: a character per pin.
+		constexpr int kPinsBufferSize = kMaxPins + 1;
 
 		// The old single value of all the pins, as the first pin save kept it.
 		constexpr int kLegacyPinnedRecipesBufferSize = 1024;
@@ -1585,6 +1599,14 @@ namespace CodexUI
 				return;
 			}
 
+			// Likewise the saved collapsed state.
+			if (strcmp(key, "PinCollapsed") == 0)
+			{
+				if (newValue[0] == '\0' && !g_savedCollapsed.empty())
+					CodexConfig::Config::SetPinCollapsed(g_savedCollapsed.c_str());
+				return;
+			}
+
 			PinSettings next = g_pinSettings;
 			if (strcmp(key, "PinArrangement") == 0)
 				next.cascade = _stricmp(newValue, "Cascade") == 0;
@@ -1676,8 +1698,9 @@ namespace CodexUI
 			return count;
 		}
 
-		// Saves which recipes are pinned, in pin order. Called when the set
-		// changes (a pin, an unpin), never per frame. Clear on the config page does
+		// Saves which recipes are pinned, in pin order, and which of them are
+		// collapsed. Called when the set changes (a pin, an unpin, a collapse),
+		// never per frame. Clear on the config page does
 		// not change it (see OnConfigChanged).
 		void CommitPinnedRecipes()
 		{
@@ -1688,6 +1711,11 @@ namespace CodexUI
 			g_savedPins = CodexPinSet::ToSlots(keys, kMaxPins);
 			for (int k = 0; k < kMaxPins; ++k)
 				CodexConfig::Config::SetPinnedRecipe(k, g_savedPins[k].c_str());
+
+			g_savedCollapsed.clear();
+			for (int k = 0; k < count; ++k)
+				g_savedCollapsed += g_pins[k].collapsed ? '1' : '0';
+			CodexConfig::Config::SetPinCollapsed(g_savedCollapsed.c_str());
 		}
 
 		// Reads the saved pins into g_savedPins. A start that finds them in the old
@@ -1695,6 +1723,10 @@ namespace CodexUI
 		// old value.
 		void LoadSavedPins()
 		{
+			char collapsed[kPinsBufferSize];
+			CodexConfig::Config::GetPinCollapsed(collapsed, sizeof(collapsed));
+			g_savedCollapsed = collapsed;
+
 			std::vector<std::string> slots(kMaxPins);
 			for (int k = 0; k < kMaxPins; ++k)
 			{
@@ -2185,6 +2217,79 @@ namespace CodexUI
 			snprintf(g_pins[index].title, sizeof(g_pins[index].title), "%s###CodexPin%d", displayName, index);
 		}
 
+		// ImGui's ImGuiCond_Always: the window is held to the height asked for.
+		constexpr int kSizeAlways = 1;
+
+		// A pin collapses by easing its window's height down to the title bar, the
+		// content clipped by the window; open, the window sizes itself to its
+		// content as before. (Collapsed, ImGui keeps a window at least its
+		// WindowMinSize tall, a few pixels more than the bar.) The height is asked
+		// for here and applied by the window's next Begin.
+		void SizeForCollapse(IModLoaderImGui* imgui, PinSlot& slot)
+		{
+			slot.sizedFixed = slot.collapsed || slot.collapseT < 1.0f;
+			if (!slot.sizedFixed)
+			{
+				slot.hints.width = 0.0f;
+				slot.hints.height = 0.0f;
+				slot.hints.size_cond = 0;
+				return;
+			}
+
+			const float bar = imgui->GetFrameHeight();
+			const float ease = slot.collapseT * slot.collapseT * (3.0f - 2.0f * slot.collapseT);
+			slot.hints.width = 0.0f; // sizes itself to its content
+			slot.hints.height = bar + ((std::max)(slot.fullH, bar) - bar) * ease;
+			slot.hints.size_cond = kSizeAlways;
+		}
+
+		// Called from the pin's own render, once a frame: measures the whole card
+		// and moves the ease on.
+		void StepCollapse(IModLoaderImGui* imgui, PinSlot& slot, float winH)
+		{
+			if (slot.sizedFixed)
+				imgui->SetScrollY(0.0f); // the clipped content stays at its top
+			if (winH > 0.0f)
+			{
+				if (!slot.sizedFixed)
+					slot.fullH = winH;
+				else if (imgui->GetScrollMaxY() > 0.0f)
+					slot.fullH = winH + imgui->GetScrollMaxY(); // what the clipped content still needs
+			}
+
+			const float goal = slot.collapsed ? 0.0f : 1.0f;
+			const float step = g_pinDeltaTime / kCollapseSeconds;
+			if (slot.collapseT < goal)
+				slot.collapseT = (std::min)(goal, slot.collapseT + step);
+			else if (slot.collapseT > goal)
+				slot.collapseT = (std::max)(goal, slot.collapseT - step);
+
+			SizeForCollapse(imgui, slot);
+		}
+
+		// A pin's collapse state for a pin just made: open, and nothing measured.
+		void ResetCollapse(PinSlot& slot)
+		{
+			slot.collapsed = false;
+			slot.collapseT = 1.0f;
+			slot.fullH = 0.0f;
+			slot.sizedFixed = false;
+			slot.hints.width = 0.0f;
+			slot.hints.height = 0.0f;
+			slot.hints.size_cond = 0;
+		}
+
+		bool AllPinsCollapsed()
+		{
+			const int count = PinCount();
+			for (int k = 0; k < count; ++k)
+			{
+				if (!g_pins[k].collapsed)
+					return false;
+			}
+			return count > 0;
+		}
+
 		// Pins a recipe in the next free slot. `restoring` is a pin coming back
 		// from the saved set: it is not saved again, nothing glides for it, and
 		// ungrouped it returns to its saved spot.
@@ -2205,6 +2310,7 @@ namespace CodexUI
 			slot.nativeRecipe = nativeRecipe;
 			slot.recipeKey = info.key;
 			slot.restoring = restoring && g_pinSettings.free;
+			ResetCollapse(slot);
 			TitleSlot(index, info.displayName.c_str());
 
 			// Nothing to move yet: changes made while no pin was up are already in effect.
@@ -2264,6 +2370,15 @@ namespace CodexUI
 				if (PinCount() == restored)
 					continue;
 				g_pinSettings.freeAnchors[restored] = savedSpots[i];
+
+				// Back as it was left: a collapsed pin starts as its title bar.
+				if (i < g_savedCollapsed.size() && g_savedCollapsed[i] == '1')
+				{
+					PinSlot& pin = g_pins[restored];
+					pin.collapsed = true;
+					pin.collapseT = 0.0f;
+					SizeForCollapse(imgui, pin);
+				}
 				++restored;
 			}
 
@@ -2307,6 +2422,9 @@ namespace CodexUI
 				g_pins[k].placeWait = g_pins[k + 1].placeWait;
 				g_pins[k].fresh = g_pins[k + 1].fresh;
 				g_pins[k].restoring = g_pins[k + 1].restoring;
+				g_pins[k].collapsed = g_pins[k + 1].collapsed;
+				g_pins[k].collapseT = g_pins[k + 1].collapseT;
+				g_pins[k].fullH = g_pins[k + 1].fullH;
 				g_pins[k].glide.active = false;
 				if (g_pinSettings.free)
 				{
@@ -2327,6 +2445,7 @@ namespace CodexUI
 			last.nativeRecipe = nullptr;
 			last.recipeKey.clear();
 			last.restoring = false;
+			ResetCollapse(last);
 			last.rect = PinRect{};
 			last.dragging = false;
 			last.placePending = false;
@@ -2437,11 +2556,15 @@ namespace CodexUI
 		constexpr int kColButtonHovered = 22;
 		constexpr int kColButtonActive  = 23;
 
-		// The X at the right end of a pinned window's title bar, drawn and
-		// hit-tested where ImGui puts a window's own close button (widget
-		// windows are begun without p_open, so they have none). True when it is
-		// clicked.
-		bool RenderUnpinX(IModLoaderImGui* imgui)
+		// Where a pinned window's title bar holds its buttons: the first at the right
+		// end, where ImGui puts a window's own close button (widget windows are
+		// begun without p_open, so they have none), the next one to its left.
+		struct TitleButtonBox
+		{
+			float minX, minY, maxX, maxY;
+		};
+
+		TitleButtonBox TitleButtonAt(IModLoaderImGui* imgui, int fromRight)
 		{
 			float winX = 0.0f, winY = 0.0f, winW = 0.0f, winH = 0.0f;
 			imgui->GetWindowPos(&winX, &winY);
@@ -2449,31 +2572,127 @@ namespace CodexUI
 
 			const float size = imgui->GetFontSize();
 			const float pad  = (imgui->GetFrameHeight() - size) * 0.5f;
-			const float minX = winX + winW - pad - size;
+			const float minX = winX + winW - pad - size - static_cast<float>(fromRight) * (size + pad);
 			const float minY = winY + pad;
-			const float maxX = minX + size;
-			const float maxY = minY + size;
+			return { minX, minY, minX + size, minY + size };
+		}
 
-			const bool hovered = imgui->IsWindowHovered(0) && imgui->IsMouseHoveringRect(minX, minY, maxX, maxY, false);
+		enum class TitleGlyph { Close, Collapse };
+
+		// One button of a pinned window's title bar, hit-tested where it is drawn.
+		// True when it is clicked.
+		bool RenderTitleButton(IModLoaderImGui* imgui, int fromRight, TitleGlyph glyph, const char* tooltip)
+		{
+			float winX = 0.0f, winY = 0.0f, winW = 0.0f, winH = 0.0f;
+			imgui->GetWindowPos(&winX, &winY);
+			imgui->GetWindowSize(&winW, &winH);
+
+			const TitleButtonBox box = TitleButtonAt(imgui, fromRight);
+			const float size = box.maxX - box.minX;
+			const bool hovered = imgui->IsWindowHovered(0) && imgui->IsMouseHoveringRect(box.minX, box.minY, box.maxX, box.maxY, false);
 			const bool clicked = hovered && imgui->IsMouseClicked(0, false);
 
 			// The window's draw list is clipped to the content area, below the
 			// title bar.
 			PluginDrawList dl = imgui->GetWindowDrawList();
 			imgui->PushClipRect(winX, winY, winX + winW, winY + winH, false);
-			const float cx = (minX + maxX) * 0.5f;
-			const float cy = (minY + maxY) * 0.5f;
+			const float cx = (box.minX + box.maxX) * 0.5f;
+			const float cy = (box.minY + box.maxY) * 0.5f;
 			if (hovered)
 				imgui->DL_AddCircleFilled(dl, cx, cy, size * 0.5f + 1.0f,
 					imgui->GetColorU32FromCol(clicked ? kColButtonActive : kColButtonHovered, 1.0f), 12);
 			const unsigned int col = imgui->GetColorU32FromCol(kColText, 1.0f);
 			const float r = size * 0.5f * 0.5f;
-			imgui->DL_AddLine(dl, cx - r, cy - r, cx + r, cy + r, col, 1.0f);
-			imgui->DL_AddLine(dl, cx - r, cy + r, cx + r, cy - r, col, 1.0f);
+			if (glyph == TitleGlyph::Close)
+			{
+				imgui->DL_AddLine(dl, cx - r, cy - r, cx + r, cy + r, col, 1.0f);
+				imgui->DL_AddLine(dl, cx - r, cy + r, cx + r, cy - r, col, 1.0f);
+			}
+			else
+			{
+				imgui->DL_AddLine(dl, cx - r, cy + r, cx + r, cy + r, col, 1.0f);
+			}
 			imgui->PopClipRect();
 			if (hovered)
-				imgui->SetTooltip("Unpin this recipe.");
+				imgui->SetTooltip(tooltip);
 			return clicked;
+		}
+
+		// The word "all" in the title bar's own text, just left of the buttons:
+		// shown while Ctrl is held, when the buttons act on every pin.
+		void RenderTitleAll(IModLoaderImGui* imgui)
+		{
+			float winX = 0.0f, winY = 0.0f, winW = 0.0f, winH = 0.0f;
+			imgui->GetWindowPos(&winX, &winY);
+			imgui->GetWindowSize(&winW, &winH);
+
+			const TitleButtonBox collapse = TitleButtonAt(imgui, 1);
+			const float pad = (imgui->GetFrameHeight() - imgui->GetFontSize()) * 0.5f;
+			float textW = 0.0f, textH = 0.0f;
+			imgui->CalcTextSize("all", &textW, &textH, false, -1.0f);
+
+			PluginDrawList dl = imgui->GetWindowDrawList();
+			imgui->PushClipRect(winX, winY, winX + winW, winY + winH, false);
+			imgui->DL_AddText(dl, collapse.minX - pad - textW, collapse.minY, imgui->GetColorU32FromCol(kColText, 1.0f), "all");
+			imgui->PopClipRect();
+		}
+
+		// Whether Ctrl is held, which makes a pin's title buttons act on every pin.
+		bool CtrlHeld()
+		{
+			IPluginHooks* hooks = GetHooks();
+			if (!hooks || !hooks->Input || !hooks->Input->IsKeyHeld)
+				return false;
+			return hooks->Input->IsKeyHeld("LeftControl") || hooks->Input->IsKeyHeld("RightControl");
+		}
+
+		struct TitleClicks
+		{
+			bool close = false;
+			bool collapse = false;
+		};
+
+		// The collapse and close buttons of a pinned window's title bar, with "all"
+		// before them while Ctrl is held.
+		TitleClicks RenderTitleButtons(IModLoaderImGui* imgui, const PinSlot& slot, bool ctrl)
+		{
+			if (ctrl)
+				RenderTitleAll(imgui);
+
+			TitleClicks clicks;
+			const char* collapseTip = ctrl ? (AllPinsCollapsed() ? "Expand all pins" : "Collapse all pins")
+				: (slot.collapsed ? "Expand this recipe." : "Collapse this recipe.");
+			clicks.collapse = RenderTitleButton(imgui, 1, TitleGlyph::Collapse, collapseTip);
+			clicks.close = RenderTitleButton(imgui, 0, TitleGlyph::Close, ctrl ? "Close all pins" : "Unpin this recipe.");
+			return clicks;
+		}
+
+		// What a click on the title bar's buttons does: close or collapse this pin,
+		// or with Ctrl held every pin. Ctrl on collapse opens them all again when
+		// they are all collapsed already.
+		void ActOnTitleClicks(int index, const TitleClicks& clicks, bool ctrl)
+		{
+			if (clicks.collapse)
+			{
+				const bool collapse = ctrl ? !AllPinsCollapsed() : !g_pins[index].collapsed;
+				const int count = PinCount();
+				for (int k = 0; k < count; ++k)
+				{
+					if (ctrl || k == index)
+						g_pins[k].collapsed = collapse;
+				}
+				CommitPinnedRecipes();
+			}
+
+			if (!clicks.close)
+				return;
+			if (!ctrl)
+			{
+				UnpinSlot(index);
+				return;
+			}
+			for (int k = PinCount() - 1; k >= 0; --k)
+				UnpinSlot(k);
 		}
 
 		// Pinned cards show their edit controls (the unpin X, Open and Planner)
@@ -2521,7 +2740,11 @@ namespace CodexUI
 			// then follows the mouse, and that pin is placed by the layout like every
 			// follower. Ungrouped: every pin is dragged on its own.
 			const bool follower = !g_pinSettings.free && index != 0;
-			slot.hints.extra_window_flags = follower ? kPinWindowFlags | PluginWindowFlags_NoMove : kPinWindowFlags;
+			StepCollapse(imgui, slot, winH);
+			int windowFlags = slot.sizedFixed ? (kPinWindowFlags & ~PluginWindowFlags_AlwaysAutoResize) | PluginWindowFlags_NoScrollbar : kPinWindowFlags;
+			if (follower)
+				windowFlags |= PluginWindowFlags_NoMove;
+			slot.hints.extra_window_flags = windowFlags;
 
 			if (g_pinSettings.free)
 			{
@@ -2564,13 +2787,14 @@ namespace CodexUI
 				StepPinGlides();
 
 			const bool interactive = PinsEditable(imgui);
+			const bool ctrl = interactive && CtrlHeld();
 
 			CodexRecipes::RecipeInfo info;
 			if (!slot.nativeRecipe || !CodexRecipes::FindByNativeRecipe(slot.nativeRecipe, info))
 			{
 				imgui->TextDisabled("Recipe unavailable.");
-				if (interactive && RenderUnpinX(imgui))
-					UnpinSlot(index);
+				if (interactive)
+					ActOnTitleClicks(index, RenderTitleButtons(imgui, slot, ctrl), ctrl);
 				return;
 			}
 
@@ -2580,7 +2804,7 @@ namespace CodexUI
 			char line[256];
 			snprintf(line, sizeof(line), "%s  -  %.1fs", info.buildingName.c_str(), info.buildTimeSeconds);
 			imgui->TextDisabled(line);
-			const bool unpinClicked = interactive && RenderUnpinX(imgui);
+			const TitleClicks titleClicks = interactive ? RenderTitleButtons(imgui, slot, ctrl) : TitleClicks{};
 
 			for (const CodexRecipes::RecipeItemRef& input : info.inputs)
 			{
@@ -2630,8 +2854,7 @@ namespace CodexUI
 				RenderLaunchPlannerButton(imgui, info);
 			}
 
-			if (unpinClicked)
-				UnpinSlot(index);
+			ActOnTitleClicks(index, titleClicks, ctrl);
 		}
 
 		template <int Index>

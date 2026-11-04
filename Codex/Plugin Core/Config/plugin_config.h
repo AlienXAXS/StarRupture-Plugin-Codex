@@ -125,6 +125,13 @@ namespace CodexConfig
 		},
 		{
 			"Menu",
+			"PinCollapsed",
+			ConfigValueType::Hidden,
+			"",
+			"Which pinned recipes are collapsed to their title bar, one 1 (collapsed) or 0 per pin in pin order (empty = none)"
+		},
+		{
+			"Menu",
 			"PinnedRecipe1",
 			ConfigValueType::Hidden,
 			"",
@@ -364,6 +371,20 @@ namespace CodexConfig
 		{
 			if (s_self)
 				s_self->config->WriteString(s_self, "Menu", "PinFreeOffsets", offsets);
+		}
+
+		// Which pins are collapsed to their title bar: one "1" (collapsed) or "0" per
+		// pin, in pin order; empty means none.
+		static void GetPinCollapsed(char* out, int maxLen)
+		{
+			if (!s_self || !s_self->config->ReadString(s_self, "Menu", "PinCollapsed", out, maxLen, ""))
+				out[0] = '\0';
+		}
+
+		static void SetPinCollapsed(const char* flags)
+		{
+			if (s_self)
+				s_self->config->WriteString(s_self, "Menu", "PinCollapsed", flags);
 		}
 
 		// The pinned recipes' keys (asset names), one per slot (1 to 8) in pin order,
