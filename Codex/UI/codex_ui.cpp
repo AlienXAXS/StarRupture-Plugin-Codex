@@ -2683,24 +2683,14 @@ namespace CodexUI
 		constexpr const char* kIconCollapse = "\xEE\xA4\xB1"; // U+E931 minimize
 		constexpr const char* kIconExpand   = "\xEE\x97\x8F"; // U+E5CF expand_more
 
-		// Draws an icon with its em box centred on (cx, cy), moved down by the same
-		// shift the loader's icon GlyphOffset gives it: the icon font is merged on
-		// the text font's baseline, and the offset puts its em box where the text
-		// line's middle is. This goes away once the loader applies it. The shift is
-		// 4.5/13 of the font size for the default font (monospace, whose "i" and "W"
-		// are as wide) and 2.5/15 for a TTF family. Across it the advance's middle
-		// is the ink's.
+		// Draws an icon with its em box centred on (cx, cy). The loader centres the
+		// glyph itself through the icon font's GlyphOffset (1.23.1 and later).
 		void DrawIconCentred(IModLoaderImGui* imgui, PluginDrawList dl, const char* icon, float cx, float cy)
 		{
-			float narrowW = 0.0f, wideW = 0.0f, lineH = 0.0f;
-			imgui->CalcTextSize("i", &narrowW, &lineH, false, -1.0f);
-			imgui->CalcTextSize("W", &wideW, &lineH, false, -1.0f);
 			const float size = imgui->GetFontSize();
-			const bool monospace = narrowW == wideW;
-			const float shift = std::floor(size * (monospace ? 4.5f / 13.0f : 2.5f / 15.0f) + 0.5f);
 			float iconW = 0.0f, iconH = 0.0f;
 			imgui->CalcTextSize(icon, &iconW, &iconH, false, -1.0f);
-			imgui->DL_AddText(dl, cx - iconW * 0.5f, cy - size * 0.5f + shift, imgui->GetColorU32FromCol(kColText, 1.0f), icon);
+			imgui->DL_AddText(dl, cx - iconW * 0.5f, cy - size * 0.5f, imgui->GetColorU32FromCol(kColText, 1.0f), icon);
 		}
 
 		enum class TitleGlyph { Close, Collapse, Expand };
