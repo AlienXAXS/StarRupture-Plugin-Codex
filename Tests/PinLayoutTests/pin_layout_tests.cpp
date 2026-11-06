@@ -3,11 +3,16 @@
 // gap (Codex/UI/pin_layout.h), so no game and no ImGui are needed.
 #include "UI/pin_layout.h"
 #include "UI/pin_set.h"
+#include "icon_requests_tests.h"
 
 #include <cmath>
 #include <cstdio>
 #include <string>
 #include <vector>
+
+#include <crtdbg.h>
+#include <stdlib.h>
+#include <windows.h>
 
 using namespace CodexPinLayout;
 
@@ -430,6 +435,12 @@ namespace
 
 int main()
 {
+	// A failure ends the run with an exit code, never a dialog.
+	SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX);
+	_set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
+	_CrtSetReportMode(_CRT_ASSERT, 0);
+	_CrtSetReportMode(_CRT_ERROR, 0);
+
 	// 1. The grid: five resolutions, three lead spots, both arrangements, gap
 	//    on and off, three edges, 1 to 8 pins, font scale 1.0 and 2.0.
 	int cases = 0;
@@ -1312,6 +1323,8 @@ int main()
 			printf("  %d random layouts checked\n", checked);
 		}
 	}
+
+	RunIconRequestTests(&Check);
 
 	printf("\n%d checks, %d failed\n", g_checks, g_failed);
 	return g_failed == 0 ? 0 : 1;

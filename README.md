@@ -40,6 +40,11 @@ loader the plugin shows "Needs loader" and stays off.
   them back out the same way. The arrow always stays clickable. The choice lasts for the session, so it stays set the next time a menu opens, and
   resets when the game restarts. During plain gameplay the pins behave as before.
 
+- **Icons load when they are shown** <sup>[✦](#msantoro12)</sup> -- item icons are copied the first
+  time they are drawn, not all at launch, so Codex no longer holds the loading screen for them. A
+  row whose icon is still loading keeps its place, so nothing moves when the icon appears. Icons
+  stay loaded until the game closes or the plugin is reloaded.
+
 ---
 
 ## Features

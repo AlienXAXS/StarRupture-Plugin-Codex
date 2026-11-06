@@ -48,14 +48,18 @@ namespace CodexTooltipPin
 			return SDK::UKismetTextLibrary::Conv_TextToString(text).ToString();
 		}
 
-		// The texture the tooltip's icon shows, or null. Compared, never dereferenced.
-		const void* TooltipTexture(IPluginObjectProperties* properties, SDK::UUserWidget* tooltip)
+		// The identity of the texture the tooltip's icon shows, or empty. Read in
+		// the tick that looks at the tooltip, and not kept.
+		std::string TooltipTexture(IPluginObjectProperties* properties, SDK::UUserWidget* tooltip)
 		{
 			SDK::UImage** icon = CodexFields::TooltipIcon.In(properties, tooltip);
 			if (!icon || !*icon)
-				return nullptr;
+				return {};
 			const SDK::FSlateBrush* brush = CodexFields::ImageBrush.In(properties, *icon);
-			return brush ? brush->ResourceObject : nullptr;
+			SDK::UObject* texture = brush ? brush->ResourceObject : nullptr;
+			if (!texture || !SDK::UKismetSystemLibrary::IsValid(texture))
+				return {};
+			return texture->GetFullName();
 		}
 
 		// The item the tooltip shows, among the items a recipe makes: by its
@@ -63,7 +67,7 @@ namespace CodexTooltipPin
 		// one item. A title naming no product (a raw resource) gives nothing, so
 		// an icon it shares with a product cannot pin that product. Empty when
 		// that leaves anything but exactly one.
-		std::string MatchProduct(const std::string& title, const void* texture)
+		std::string MatchProduct(const std::string& title, const std::string& texture)
 		{
 			std::vector<std::string> byName;
 			std::vector<std::string> byIcon;
@@ -72,7 +76,7 @@ namespace CodexTooltipPin
 				const std::string& item = recipe.output.uniqueItemName;
 				if (!title.empty() && EqualsNoCase(recipe.output.displayName, title))
 					AddOnce(byName, item);
-				if (texture && CodexIcons::GetIconTexture(item) == texture)
+				if (!texture.empty() && CodexIcons::IconIs(item, texture))
 					AddOnce(byIcon, item);
 			}
 

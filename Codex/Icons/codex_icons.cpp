@@ -8,99 +8,76 @@
 #include "AssetRegistry_classes.hpp"
 #include "AssetRegistry_parameters.hpp"
 
+#include "icon_requests.h"
+
 #include <atomic>
 #include <mutex>
+#include <type_traits>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace CodexIcons
 {
 	namespace
 	{
-		struct IconEntry
+		static_assert(std::is_same_v<CodexIconRequests::Handle, PluginTextureHandle>,
+			"the request table stores plugin texture handles");
+
+		// What it takes to find an item's icon again: the item's Blueprint asset,
+		// and the icon's identity for comparing with another brush's texture.
+		// Plain strings, so nothing here can go stale when the game frees objects.
+		struct ItemSource
 		{
-			SDK::UTexture2D*    icon            = nullptr; // UTexture2D from ItemIcon.ResourceObject
-			bool                iconIsTexture2D = false;
-			PluginTextureHandle handle          = nullptr;
+			std::string package;
+			std::string asset;
+			std::string textureId;
 		};
 
 		// Populated on the game thread by RefreshIconsOnGameThread, adopted by
 		// Tick() (also game thread, via OnEngineTick).
-		std::mutex                                  g_pendingMutex;
-		std::unordered_map<std::string, IconEntry>  g_pendingIcons;
+		std::mutex                                   g_pendingMutex;
+		std::unordered_map<std::string, ItemSource>  g_pendingSources;
 		bool                                         g_pendingReady = false;
 		std::atomic<bool>                            g_refreshInFlight{ false };
 
-		// Owned by Tick()/GetIcon() - both called from the game thread.
-		std::unordered_map<std::string, IconEntry> g_icons;
+		// Game thread only.
+		std::unordered_map<std::string, ItemSource> g_sources;
 		bool                                        g_iconsLoaded = false;
-		bool                                         g_needsRetry  = false; // some textures returned NULL (D3D12 not ready yet)
 
-		bool HasMissingHandles(const std::unordered_map<std::string, IconEntry>& icons)
+		// Asked for by the render callback, served by Tick().
+		CodexIconRequests::Table g_requests;
+
+		double NowMs()
 		{
-			for (const auto& [key, entry] : icons)
-				if (entry.iconIsTexture2D && entry.icon && !entry.handle)
-					return true;
-			return false;
-		}
-
-		void FreeIconTexHandles(std::unordered_map<std::string, IconEntry>& icons)
-		{
-			IPluginHooks* hooks = GetHooks();
-			if (!hooks || !hooks->ImGuiTextures)
-				return;
-
-			for (auto& [key, entry] : icons)
+			static const double perMs = []
 			{
-				if (entry.handle)
-				{
-					hooks->ImGuiTextures->FreeTexture(entry.handle);
-					entry.handle = nullptr;
-				}
-			}
+				LARGE_INTEGER frequency;
+				QueryPerformanceFrequency(&frequency);
+				return static_cast<double>(frequency.QuadPart) / 1000.0;
+			}();
+			LARGE_INTEGER now;
+			QueryPerformanceCounter(&now);
+			return static_cast<double>(now.QuadPart) / perMs;
 		}
 
-		// Attempts to register UTexture2D icons with ImGui for every entry that
-		// has no handle yet. Safe to call repeatedly - LoadFromUTexture2D returns
-		// NULL (without throwing) when D3D12 isn't ready, so entries that miss
-		// here are retried on the next call.
-		void LoadIconTexHandles(std::unordered_map<std::string, IconEntry>& icons, IPluginSplash* splash = nullptr)
-		{
-			IPluginHooks* hooks = GetHooks();
-			if (!hooks || !hooks->ImGuiTextures)
-				return;
-
-			const int total = static_cast<int>(icons.size());
-			int loaded = 0;
-
-			if (splash && splash->IsVisible())
-				splash->SetSubStatus("(Codex) Copying item icons... Wait!");
-
-			for (auto& [key, entry] : icons)
-			{
-				if (entry.iconIsTexture2D && entry.icon && !entry.handle)
-				{
-					const std::string texName = entry.icon->GetName();
-					entry.handle = hooks->ImGuiTextures->LoadFromUTexture2D(entry.icon, texName.c_str());
-				}
-
-				if (splash && splash->IsVisible() && total > 0)
-				{
-					++loaded;
-					splash->SetSubProgress(static_cast<float>(loaded) / static_cast<float>(total));
-				}
-			}
-
-			if (splash && splash->IsVisible())
-				splash->ClearSubBar();
-		}
-
-		// ResourceObject might be UTexture, UMaterialInterface, etc. - the IsA
-		// check at load time is the safe gate; just return it as UTexture2D* for
-		// storage.
-		SDK::UTexture2D* GetItemIconResource(SDK::UAuItemDataBase* item)
+		// The item's icon if it is a UTexture2D. ResourceObject might be a
+		// UTexture, a UMaterialInterface, etc. - the IsA check is the safe gate.
+		// The pointer is good for the tick that fetched it and no longer.
+		SDK::UTexture2D* GetItemIconTexture(SDK::UAuItemDataBase* item)
 		{
 			const auto* brush = CodexFields::ItemIcon.In(item);
-			return brush ? reinterpret_cast<SDK::UTexture2D*>(brush->ResourceObject) : nullptr;
+			SDK::UObject* resource = brush ? brush->ResourceObject : nullptr;
+			if (!resource)
+				return nullptr;
+
+			try
+			{
+				return resource->IsA(SDK::UTexture2D::StaticClass()) ? static_cast<SDK::UTexture2D*>(resource) : nullptr;
+			}
+			catch (...)
+			{
+				return nullptr;
+			}
 		}
 
 		// Every item type is defined as a Blueprint (UAuItemBlueprint asset whose
@@ -216,13 +193,11 @@ namespace CodexIcons
 		// Forces the Blueprint's package to load and resolves it down to the
 		// UAuItemDataBase CDO that actually holds the item's icon: package ->
 		// generated "<AssetName>_C" class -> ClassDefaultObject.
-		SDK::UAuItemDataBase* ResolveItemFromBlueprintAsset(const SDK::FAssetData& assetData)
+		SDK::UAuItemDataBase* ResolveItemFromBlueprintAsset(const std::string& assetName, const std::string& packageName)
 		{
 			if (!ResolveEngineLookupFunctions())
 				return nullptr;
 
-			const std::string assetName   = assetData.AssetName.ToString();
-			const std::string packageName = assetData.PackageName.GetRawString();
 			if (packageName.empty())
 				return nullptr;
 
@@ -251,13 +226,13 @@ namespace CodexIcons
 		}
 
 		// Enumerates every item type via the asset registry (mirrors
-		// UCrUW_CheatItemsTab::DebugGatherAllItems), resolves each one's icon,
-		// and pre-loads a GPU texture handle for it. Runs on the game thread
-		// (posted via Init/Tick); publishes its result through g_pendingIcons
-		// for Tick() to adopt.
+		// UCrUW_CheatItemsTab::DebugGatherAllItems) and keeps, for each one that
+		// has a texture icon, the strings that find it again. Runs on the game
+		// thread (posted via Init/Tick); publishes its result through
+		// g_pendingSources for Tick() to adopt. Copies no texture.
 		void RefreshIconsOnGameThread(void* /*context*/)
 		{
-			std::unordered_map<std::string, IconEntry> icons;
+			std::unordered_map<std::string, ItemSource> sources;
 
 			IPluginSelf* self = GetSelf();
 			IPluginSplash* splash = (self && self->hooks) ? self->hooks->Splash : nullptr;
@@ -287,7 +262,11 @@ namespace CodexIcons
 					const int rawCount = assetData.Num();
 					for (int i = 0; i < rawCount; ++i)
 					{
-						SDK::UAuItemDataBase* item = ResolveItemFromBlueprintAsset(assetData[i]);
+						ItemSource source;
+						source.asset   = assetData[i].AssetName.ToString();
+						source.package = assetData[i].PackageName.GetRawString();
+
+						SDK::UAuItemDataBase* item = ResolveItemFromBlueprintAsset(source.asset, source.package);
 						if (!item)
 							continue;
 
@@ -295,22 +274,16 @@ namespace CodexIcons
 						if (uniqueName.empty())
 							continue;
 
-						IconEntry entry;
-						entry.icon = GetItemIconResource(item);
-						if (entry.icon)
-						{
-							try { entry.iconIsTexture2D = entry.icon->IsA(SDK::UTexture2D::StaticClass()); }
-							catch (...) {}
-						}
-
-						if (!entry.icon || !entry.iconIsTexture2D)
+						SDK::UTexture2D* icon = GetItemIconTexture(item);
+						if (!icon)
 							continue;
 
-						icons.emplace(uniqueName, std::move(entry));
+						source.textureId = icon->GetFullName();
+						sources.emplace(uniqueName, std::move(source));
 					}
 
 					LOG_INFO("CodexIcons: resolved %d item icon(s) from %d Blueprint asset(s).",
-						static_cast<int>(icons.size()), rawCount);
+						static_cast<int>(sources.size()), rawCount);
 				}
 			}
 			catch (...)
@@ -318,13 +291,9 @@ namespace CodexIcons
 				LOG_DEBUG("CodexIcons: exception while resolving item icons via the asset registry.");
 			}
 
-			// Pre-load texture handles while still on the game thread. D3D12 may
-			// not be ready yet (returns NULL); Tick() retries on each call.
-			LoadIconTexHandles(icons, splash);
-
 			{
 				std::lock_guard<std::mutex> lock(g_pendingMutex);
-				g_pendingIcons = std::move(icons);
+				g_pendingSources = std::move(sources);
 				g_pendingReady = true;
 				g_refreshInFlight.store(false, std::memory_order_release);
 			}
@@ -358,22 +327,52 @@ namespace CodexIcons
 
 		void AdoptPendingIconsIfReady()
 		{
-			std::unordered_map<std::string, IconEntry> incoming;
+			std::unordered_map<std::string, ItemSource> incoming;
 			{
 				std::lock_guard<std::mutex> lock(g_pendingMutex);
 				if (!g_pendingReady)
 					return;
 
-				incoming = std::move(g_pendingIcons);
-				g_pendingIcons.clear();
+				incoming = std::move(g_pendingSources);
+				g_pendingSources.clear();
 				g_pendingReady = false;
 			}
 
-			FreeIconTexHandles(g_icons);
-			g_icons       = std::move(incoming);
+			std::unordered_set<std::string> names;
+			for (const auto& [name, source] : incoming)
+				names.insert(name);
+
+			g_sources = std::move(incoming);
+			g_requests.SetKnown(std::move(names));
 			g_iconsLoaded = true;
-			g_needsRetry  = HasMissingHandles(g_icons);
-			LOG_INFO("CodexIcons: loaded %d item icon(s).", static_cast<int>(g_icons.size()));
+			LOG_INFO("CodexIcons: %d item icon(s) ready to load on demand.", static_cast<int>(g_sources.size()));
+		}
+
+		// Finds the item's texture again and copies it into the loader. Returns
+		// null while the texture is not ready (D3D12 not up, texture still
+		// streaming), which Serve() retries on a later tick. The texture pointer
+		// lives only inside this call.
+		PluginTextureHandle LoadIcon(const std::string& uniqueItemName)
+		{
+			IPluginHooks* hooks = GetHooks();
+			const auto source = g_sources.find(uniqueItemName);
+			if (!hooks || !hooks->ImGuiTextures || source == g_sources.end())
+				return nullptr;
+
+			try
+			{
+				SDK::UAuItemDataBase* item = ResolveItemFromBlueprintAsset(source->second.asset, source->second.package);
+				SDK::UTexture2D* icon = item ? GetItemIconTexture(item) : nullptr;
+				if (!icon)
+					return nullptr;
+
+				const std::string texName = icon->GetName();
+				return hooks->ImGuiTextures->LoadFromUTexture2D(icon, texName.c_str());
+			}
+			catch (...)
+			{
+				return nullptr;
+			}
 		}
 	}
 
@@ -397,8 +396,17 @@ namespace CodexIcons
 
 	void Shutdown()
 	{
-		FreeIconTexHandles(g_icons);
-		g_icons.clear();
+		IPluginHooks* hooks = GetHooks();
+		for (PluginTextureHandle handle : g_requests.Clear())
+			if (hooks && hooks->ImGuiTextures)
+				hooks->ImGuiTextures->FreeTexture(handle);
+
+		{
+			std::lock_guard<std::mutex> lock(g_pendingMutex);
+			g_pendingSources.clear();
+			g_pendingReady = false;
+		}
+		g_sources.clear();
 		g_iconsLoaded = false;
 	}
 
@@ -414,23 +422,22 @@ namespace CodexIcons
 			return;
 		}
 
-		// Retry any entries whose texture wasn't ready on the previous attempt.
-		if (g_needsRetry)
-		{
-			LoadIconTexHandles(g_icons);
-			g_needsRetry = HasMissingHandles(g_icons);
-		}
+		CodexIconRequests::Serve(g_requests, &LoadIcon, &NowMs, CodexIconRequests::kBudgetMs);
 	}
 
 	PluginTextureHandle GetIcon(const std::string& uniqueItemName)
 	{
-		auto it = g_icons.find(uniqueItemName);
-		return it != g_icons.end() ? it->second.handle : nullptr;
+		return g_requests.Get(uniqueItemName);
 	}
 
-	const void* GetIconTexture(const std::string& uniqueItemName)
+	bool HasIcon(const std::string& uniqueItemName)
 	{
-		auto it = g_icons.find(uniqueItemName);
-		return it != g_icons.end() ? it->second.icon : nullptr;
+		return g_requests.Has(uniqueItemName);
+	}
+
+	bool IconIs(const std::string& uniqueItemName, const std::string& textureId)
+	{
+		const auto it = g_sources.find(uniqueItemName);
+		return it != g_sources.end() && it->second.textureId == textureId;
 	}
 }

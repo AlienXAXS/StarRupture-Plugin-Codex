@@ -6,7 +6,7 @@
     msbuild Tests\PinLayoutTests\PinLayoutTests.vcxproj /p:Configuration=Release /p:Platform=x64
     build\tests\pin_layout_tests.exe
 
-  The header has no dependencies, so nothing else is compiled.
+  The headers take no game types, so nothing else is compiled.
 -->
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
@@ -52,10 +52,13 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="pin_layout_tests.cpp" />
+    <ClCompile Include="icon_requests_tests.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\Codex\UI\pin_layout.h" />
     <ClInclude Include="..\..\Codex\UI\pin_set.h" />
+    <ClInclude Include="..\..\Codex\Icons\icon_requests.h" />
+    <ClInclude Include="icon_requests_tests.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>
