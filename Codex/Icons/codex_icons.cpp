@@ -12,6 +12,7 @@
 
 #include <atomic>
 #include <mutex>
+#include <stdexcept>
 #include <type_traits>
 #include <unordered_map>
 #include <unordered_set>
@@ -348,10 +349,19 @@ namespace CodexIcons
 			LOG_INFO("CodexIcons: %d item icon(s) ready to load on demand.", static_cast<int>(g_sources.size()));
 		}
 
+		void LogGaveUp(const std::string& uniqueItemName)
+		{
+			LOG_WARN("CodexIcons: giving up on the icon for '%s'.", uniqueItemName.c_str());
+		}
+
 		// Finds the item's texture again and copies it into the loader. Returns
 		// null while the texture is not ready (D3D12 not up, texture still
-		// streaming), which Serve() retries on a later tick. The texture pointer
-		// lives only inside this call.
+		// streaming, an object already dying), which Serve() retries on a later
+		// tick. When the loader has no free texture slot it throws
+		// std::out_of_range, and that icon is given up on at once: a slot does
+		// not free up by waiting. A texture another plugin already holds is found
+		// by name before the loader looks for a slot, so it still loads from a
+		// full table. The texture pointer lives only inside this call.
 		PluginTextureHandle LoadIcon(const std::string& uniqueItemName)
 		{
 			IPluginHooks* hooks = GetHooks();
@@ -362,12 +372,20 @@ namespace CodexIcons
 			try
 			{
 				SDK::UAuItemDataBase* item = ResolveItemFromBlueprintAsset(source->second.asset, source->second.package);
-				SDK::UTexture2D* icon = item ? GetItemIconTexture(item) : nullptr;
-				if (!icon)
+				if (!item || !SDK::UKismetSystemLibrary::IsValid(item))
+					return nullptr;
+				SDK::UTexture2D* icon = GetItemIconTexture(item);
+				if (!icon || !SDK::UKismetSystemLibrary::IsValid(icon))
 					return nullptr;
 
 				const std::string texName = icon->GetName();
 				return hooks->ImGuiTextures->LoadFromUTexture2D(icon, texName.c_str());
+			}
+			catch (const std::out_of_range&)
+			{
+				if (g_requests.GiveUp(uniqueItemName))
+					LogGaveUp(uniqueItemName);
+				return nullptr;
 			}
 			catch (...)
 			{
@@ -422,7 +440,7 @@ namespace CodexIcons
 			return;
 		}
 
-		CodexIconRequests::Serve(g_requests, &LoadIcon, &NowMs, CodexIconRequests::kBudgetMs);
+		CodexIconRequests::Serve(g_requests, &LoadIcon, &NowMs, CodexIconRequests::kBudgetMs, &LogGaveUp);
 	}
 
 	PluginTextureHandle GetIcon(const std::string& uniqueItemName)

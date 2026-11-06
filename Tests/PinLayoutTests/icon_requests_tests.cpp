@@ -130,6 +130,44 @@ void RunIconRequestTests(CheckFn check)
 
 	{
 		Table t;
+		t.SetKnown(Known({ "a", "b" }));
+		t.Get("a");
+		t.Get("b");
+		FakeClock clock;
+		int calls = 0;
+		std::vector<std::string> logged;
+		const auto noSlot = [&](const std::string& n)
+		{
+			++calls;
+			if (n == "a")
+				t.GiveUp(n);
+			return Handle(nullptr);
+		};
+		const auto note = [&](const std::string& n) { logged.push_back(n); };
+		Serve(t, noSlot, clock, 8.0, note);
+		check(calls == 2 && t.Pending() == 1, "an icon with no free slot is not queued again", "no slot");
+		check(!t.Has("a") && t.Has("b"), "only the icon without a slot counts as having none", "no slot");
+		for (int i = 0; i < 20; ++i)
+			Serve(t, noSlot, clock, 8.0, note);
+		check(calls == 22, "an icon with no free slot is tried once", "no slot");
+		check(!t.GiveUp("a"), "giving up twice reports once", "no slot");
+		check(logged.empty(), "a terminal give-up is not also counted as running out of attempts", "no slot");
+	}
+
+	{
+		Table t;
+		t.SetKnown(Known({ "a" }));
+		t.Get("a");
+		FakeClock clock;
+		std::vector<std::string> logged;
+		const auto never = [](const std::string&) { return Handle(nullptr); };
+		for (int i = 0; i < kMaxAttempts + 5; ++i)
+			Serve(t, never, clock, 8.0, [&](const std::string& n) { logged.push_back(n); });
+		check(logged.size() == 1 && logged[0] == "a", "running out of attempts is reported once", "give up");
+	}
+
+	{
+		Table t;
 		t.SetKnown(Known({ "a", "b", "c" }));
 		t.Get("a");
 		t.Get("b");
