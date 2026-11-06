@@ -2684,7 +2684,7 @@ namespace CodexUI
 		constexpr const char* kIconExpand   = "\xEE\x97\x8F"; // U+E5CF expand_more
 
 		// Draws an icon with its em box centred on (cx, cy). The loader centres the
-		// glyph itself through the icon font's GlyphOffset (1.23.1 and later).
+		// glyph itself through the icon font's GlyphOffset (1.23.0 and later).
 		void DrawIconCentred(IModLoaderImGui* imgui, PluginDrawList dl, const char* icon, float cx, float cy)
 		{
 			const float size = imgui->GetFontSize();
