@@ -27,6 +27,7 @@ namespace CodexIcons
 	PluginTextureHandle GetIcon(const std::string& uniqueItemName);
 
 	// The texture asset behind the item's icon, or null. For comparing with
-	// another brush's texture only, never to dereference. Game thread.
+	// another brush's texture only, never to dereference. Null once the
+	// texture has been freed. Game thread.
 	const void* GetIconTexture(const std::string& uniqueItemName);
 }
