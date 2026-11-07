@@ -17,8 +17,8 @@
 // Every member of a game class Codex reads, taken from the loader's map for the
 // running game build (see plugin_map.h). Resolved once in OnPluginLoadHooks;
 // read on the game thread with In(object), which is null when the object is
-// null. Structs Codex only reads through those members are covered by a size
-// check instead of a field per member.
+// null. The two structs Codex steps through (an item stack, and the entries of
+// the linked-collections map) also carry a size check.
 
 #define CODEX_FIELD(Class, Member) SR_FIELD(decltype(SDK::Class::Member), Class, Member, 0)
 
@@ -47,8 +47,6 @@ namespace CodexFields
 	inline auto RecipeCollection   = CODEX_FIELD(FCrCraftingParameters, RecipeCollection);
 
 	inline auto SimpleItemSize        = SR_SIZE_CHECK(FAuSimpleItem);
-	inline auto EntityTypeSize        = SR_SIZE_CHECK(FAuAPMassSpawnedEntityType);
-	inline auto CraftingParametersSize = SR_SIZE_CHECK(FCrCraftingParameters);
 	inline auto NestedCollectionsSize = SR_SIZE_CHECK(FNestedItemRecipeCollectionArray);
 
 	// The game's item tooltip, read when the game-menu pin key is pressed and
@@ -79,7 +77,7 @@ namespace CodexFields
 		KeysOf(UIItemType, UniqueItemName, ItemName, ItemIcon, EntityType, BuildingType, BuildingName,
 			LinkedCollections, Recipes, RecipeBuildTime, RecipeDisplayText, CraftingParameters, CrafterToRecipeMap,
 			ItemCount, ItemData, LinkedList, EntityConfigPtr, EntityConfigRef, RecipeCollection,
-			SimpleItemSize, EntityTypeSize, CraftingParametersSize, NestedCollectionsSize),
+			SimpleItemSize, NestedCollectionsSize),
 		{ "Menu.*", "Planner.*" } };
 
 	// Call before Resolve, so a miss lands on the feature and not on the plugin.
@@ -96,7 +94,7 @@ namespace CodexFields
 			UIItemType, UniqueItemName, ItemName, ItemIcon, EntityType, BuildingType, BuildingName,
 			LinkedCollections, Recipes, RecipeBuildTime, RecipeDisplayText, CraftingParameters, CrafterToRecipeMap,
 			ItemCount, ItemData, LinkedList, EntityConfigPtr, EntityConfigRef, RecipeCollection,
-			SimpleItemSize, EntityTypeSize, CraftingParametersSize, NestedCollectionsSize);
+			SimpleItemSize, NestedCollectionsSize);
 	}
 
 	// A stack's item type and its count, or null / zero when unresolved.
