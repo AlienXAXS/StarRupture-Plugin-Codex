@@ -132,6 +132,13 @@ namespace CodexConfig
 		},
 		{
 			"Menu",
+			"PinsTucked",
+			ConfigValueType::Hidden,
+			"",
+			"Whether the pins are tucked into the pin layer arrow, 1 (tucked) or 0 (empty = not tucked). Set by the arrow"
+		},
+		{
+			"Menu",
 			"PinnedRecipe1",
 			ConfigValueType::Hidden,
 			"",
@@ -385,6 +392,21 @@ namespace CodexConfig
 		{
 			if (s_self)
 				s_self->config->WriteString(s_self, "Menu", "PinCollapsed", flags);
+		}
+
+		// Whether the pins are tucked into the pin layer arrow.
+		static bool GetPinsTucked()
+		{
+			char text[8] = "";
+			if (!s_self || !s_self->config->ReadString(s_self, "Menu", "PinsTucked", text, sizeof(text), ""))
+				return false;
+			return CodexPinLayout::PinsTuckedFromText(text);
+		}
+
+		static void SetPinsTucked(bool tucked)
+		{
+			if (s_self)
+				s_self->config->WriteString(s_self, "Menu", "PinsTucked", CodexPinLayout::PinsTuckedText(tucked));
 		}
 
 		// The pinned recipes' keys (asset names), one per slot (1 to 8) in pin order,
