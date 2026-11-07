@@ -1355,10 +1355,10 @@ namespace CodexUI
 
 		// The saved choice was tucked and the restored pins are not tucked yet: they
 		// are drawn and placed first, so the tuck can take them in as they are, with
-		// no animation. Render thread only; set by LoadSavedPins.
+		// no animation. Render thread; set by LoadSavedPins at init, before any widget shows.
 		bool g_tuckRestore = false;
-		int  g_tuckSettleFrames = 0;
-		constexpr int kTuckSettleFrames = 4;
+		int  g_tuckSettleChecks = 0; // UpdatePinLayer runs that found every pin drawn
+		constexpr int kTuckSettleChecks = 4;
 
 		// How far the pins have tucked into the arrow: 0 = out, as they are
 		// drawn, 1 = in. The pins' windows are hidden while it is above 0 and the
@@ -1763,7 +1763,7 @@ namespace CodexUI
 		{
 			g_pinsTucked.store(false, std::memory_order_relaxed);
 			g_tuckRestore = CodexConfig::Config::GetPinsTucked();
-			g_tuckSettleFrames = 0;
+			g_tuckSettleChecks = 0;
 
 			char collapsed[kPinsBufferSize] = "";
 			CodexConfig::Config::GetPinCollapsed(collapsed, sizeof(collapsed));
@@ -1914,7 +1914,7 @@ namespace CodexUI
 
 		// Sets the player's tuck and saves it when it changes, so the pins come back
 		// tucked (or out) at the next start. Never called per frame.
-		void SetPinsTucked(bool tucked)
+		void CommitPinsTucked(bool tucked)
 		{
 			const bool pending = g_tuckRestore;
 			g_tuckRestore = false;
@@ -1926,7 +1926,7 @@ namespace CodexUI
 		// first pin after none, where a tuck would hide it, and for the last unpinned.
 		void UntuckNow()
 		{
-			SetPinsTucked(false);
+			CommitPinsTucked(false);
 			if (g_tuckT > 0.0f)
 			{
 				g_tuckT = 0.0f;
@@ -2867,8 +2867,8 @@ namespace CodexUI
 			// Saved tucked: once the restored pins have settled they go in at once.
 			if (g_tuckRestore && g_layerWidget && PinCount() > 0)
 			{
-				g_tuckSettleFrames = PinsDrawn() ? g_tuckSettleFrames + 1 : 0;
-				if (g_tuckSettleFrames >= kTuckSettleFrames)
+				g_tuckSettleChecks = PinsDrawn() ? g_tuckSettleChecks + 1 : 0;
+				if (g_tuckSettleChecks >= kTuckSettleChecks)
 				{
 					g_tuckRestore = false;
 					g_pinsTucked.store(true, std::memory_order_relaxed);
@@ -3166,7 +3166,7 @@ namespace CodexUI
 			imgui->GetItemRectMax(&maxX, &maxY);
 			const bool hovered = imgui->IsItemHovered();
 			if (clicked)
-				SetPinsTucked(!g_pinsTucked.load(std::memory_order_relaxed));
+				CommitPinsTucked(!g_pinsTucked.load(std::memory_order_relaxed));
 			const bool tucked = g_pinsTucked.load(std::memory_order_relaxed);
 			DrawIconCentred(imgui, imgui->GetWindowDrawList(), tucked ? kIconUntuck : kIconTuck,
 				(minX + maxX) * 0.5f, (minY + maxY) * 0.5f);
