@@ -1359,6 +1359,13 @@ namespace CodexUI
 		// wheel (ImGuiWindowFlags_NoScrollWithMouse, which the SDK has no name for).
 		constexpr int kPinHeldFlags = PluginWindowFlags_NoScrollbar | (1 << 4);
 
+		// What a pin restored under a saved tuck carries until it is placed: nothing
+		// of its window is drawn (no title bar, no background, so no border) and it
+		// takes no mouse. Its content is drawn at no alpha and starts one title bar
+		// lower, so the window measures as it will when it is shown.
+		constexpr int kPinUnseenFlags = PluginWindowFlags_NoTitleBar | PluginWindowFlags_NoBackground |
+			PluginWindowFlags_NoMouseInputs;
+
 		// The pin layer arrow: one button above the pins that tucks them into itself
 		// and brings them back out (see CodexPinLayout::PinLayerNow). It is a widget
 		// of its own, so it stays up and clickable while the pins are tucked away.
@@ -1383,6 +1390,12 @@ namespace CodexUI
 		// drawn, 1 = in. The pins' windows are hidden while it is above 0 and the
 		// arrow draws the cards shrinking. Render thread only.
 		float g_tuckT = 0.0f;
+
+		// The arrow's window is empty until its spot is worked out, so the first
+		// frames it is shown on are spent measuring: the button is drawn from the
+		// third, once the window has its size and a spot for it.
+		int g_layerPlaceFrames = 0;
+		constexpr int kLayerPlaceFrames = 2;
 
 		// The arrow and the tuck, as of the last UpdatePinLayer.
 		CodexPinLayout::PinLayerState g_layerState;
@@ -2454,6 +2467,8 @@ namespace CodexUI
 
 			if (g_self && g_self->hooks->UI)
 				g_self->hooks->UI->SetWidgetVisible(slot.widget, g_tuckT <= 0.0f);
+			if (restoring && g_tuckRestore)
+				slot.hints.extra_window_flags |= kPinUnseenFlags;
 
 			if (!restoring)
 				CommitPinnedRecipes();
@@ -2685,6 +2700,7 @@ namespace CodexUI
 		constexpr int kColText          = 0;
 		constexpr int kColWindowBg      = 2;
 		constexpr int kColBorder        = 5;
+		constexpr int kStyleVarAlpha    = 0; // ImGuiStyleVar_Alpha
 		constexpr int kColButtonHovered = 22;
 		constexpr int kColButtonActive  = 23;
 
@@ -2893,6 +2909,8 @@ namespace CodexUI
 					g_pinsTucked.store(true, std::memory_order_relaxed);
 					g_tuckT = 1.0f;
 					SetPinsHidden(true);
+					for (int k = 0; k < PinCount(); ++k)
+						g_pins[k].hints.extra_window_flags &= ~kPinUnseenFlags;
 				}
 			}
 
@@ -2972,6 +2990,9 @@ namespace CodexUI
 		{
 			PinSlot& slot = g_pins[index];
 
+			// Restored under a saved tuck: measured and placed without being seen.
+			const bool unseen = g_tuckRestore;
+
 			// A placement requested last frame has now been applied - stop
 			// forcing it.
 			slot.hints.pos_x = -1.0f;
@@ -3006,6 +3027,8 @@ namespace CodexUI
 			int windowFlags = slot.sizedFixed ? kPinWindowFlags | kPinHeldFlags : kPinWindowFlags;
 			if (follower)
 				windowFlags |= PluginWindowFlags_NoMove;
+			if (unseen && g_tuckRestore)
+				windowFlags |= kPinUnseenFlags;
 			slot.hints.extra_window_flags = windowFlags;
 
 			if (g_pinSettings.free)
@@ -3048,7 +3071,17 @@ namespace CodexUI
 			if (index == 0)
 				StepPinGlides();
 
-			const bool interactive = PinsEditable(imgui);
+			// Everything below is drawn at no alpha, one title bar down: the window has
+			// none now, and its height is the same with or without.
+			if (unseen)
+			{
+				imgui->PushStyleVarFloat(kStyleVarAlpha, 0.0f);
+				float contentX = 0.0f, contentY = 0.0f;
+				imgui->GetCursorScreenPos(&contentX, &contentY);
+				imgui->SetCursorScreenPos(contentX, contentY + imgui->GetFrameHeight());
+			}
+
+			const bool interactive = !unseen && PinsEditable(imgui);
 			const bool ctrl = interactive && CtrlHeld();
 
 			// The content is a group so its right edge is known to the title buttons,
@@ -3068,6 +3101,8 @@ namespace CodexUI
 				titleClicks = RenderTitleButtons(imgui, slot, ctrl, (std::min)(contentRight, winX + winW - windowPadX));
 			}
 			ActOnTitleClicks(index, titleClicks, ctrl);
+			if (unseen)
+				imgui->PopStyleVar(1);
 		}
 
 		template <int Index>
@@ -3187,9 +3222,18 @@ namespace CodexUI
 				g_layerHints.pivot_y = spot.pivotY;
 			}
 
-			// A button of its own size with the icon drawn over it, centred.
+			// A button of its own size with the icon drawn over it, centred. Until the
+			// window has been measured and given its spot, an empty item of the same
+			// size stands in for it.
 			const float frameH = imgui->GetFrameHeight();
-			const bool clicked = imgui->ButtonSized("###CodexPinLayerArrow", frameH, frameH);
+			const bool placing = g_layerPlaceFrames < kLayerPlaceFrames;
+			if (placing && count > 0)
+				++g_layerPlaceFrames;
+			bool clicked = false;
+			if (placing)
+				imgui->Dummy(frameH, frameH);
+			else
+				clicked = imgui->ButtonSized("###CodexPinLayerArrow", frameH, frameH);
 			float minX = 0.0f, minY = 0.0f, maxX = 0.0f, maxY = 0.0f;
 			imgui->GetItemRectMin(&minX, &minY);
 			imgui->GetItemRectMax(&maxX, &maxY);
@@ -3197,13 +3241,14 @@ namespace CodexUI
 			if (clicked)
 				CommitPinsTucked(!g_pinsTucked.load(std::memory_order_relaxed));
 			const bool tucked = g_pinsTucked.load(std::memory_order_relaxed);
-			DrawIconCentred(imgui, imgui->GetWindowDrawList(), tucked ? kIconUntuck : kIconTuck,
-				(minX + maxX) * 0.5f, (minY + maxY) * 0.5f);
+			if (!placing)
+				DrawIconCentred(imgui, imgui->GetWindowDrawList(), tucked ? kIconUntuck : kIconTuck,
+					(minX + maxX) * 0.5f, (minY + maxY) * 0.5f);
 			// The cursor is now one ItemSpacing below the button.
 			float afterX = 0.0f, afterY = 0.0f;
 			imgui->GetCursorScreenPos(&afterX, &afterY);
 			g_layerGapCloser = windowPadY - (afterY - maxY);
-			if (hovered)
+			if (hovered && !placing)
 				imgui->SetTooltip(tucked ? "Bring the pins back out." : "Tuck the pins into this button.");
 
 			// The frame the pins show again is drawn too, so they take over from the
@@ -3238,6 +3283,7 @@ namespace CodexUI
 		void UnregisterPinLayerArrow(IPluginSelf* self)
 		{
 			g_tuckT = 0.0f;
+			g_layerPlaceFrames = 0;
 			g_layerShown = false;
 			if (g_layerWidget)
 			{
