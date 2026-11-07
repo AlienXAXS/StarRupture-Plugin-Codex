@@ -18,7 +18,9 @@
 // running game build (see plugin_map.h). Resolved once in OnPluginLoadHooks;
 // read on the game thread with In(object), which is null when the object is
 // null. The two structs Codex steps through (an item stack, and the entries of
-// the linked-collections map) are covered by a size check.
+// the linked-collections map) are taken at the size the running game reflects
+// (SR_SIZE): nothing is compiled in for them, so a build that resizes one does
+// not turn the codex off.
 //
 // The structs Codex holds as single members of a game class, and reads only
 // through their own member rows, are requested at any size
@@ -56,8 +58,8 @@ namespace CodexFields
 	inline auto EntityConfigRef    = CODEX_FIELD(FAuAPMassSpawnedEntityType, EntityConfig);
 	inline auto RecipeCollection   = CODEX_FIELD(FCrCraftingParameters, RecipeCollection);
 
-	inline auto SimpleItemSize        = SR_SIZE_CHECK(FAuSimpleItem);
-	inline auto NestedCollectionsSize = SR_SIZE_CHECK(FNestedItemRecipeCollectionArray);
+	inline auto SimpleItemSize        = SR_SIZE(FAuSimpleItem);
+	inline auto NestedCollectionsSize = SR_SIZE(FNestedItemRecipeCollectionArray);
 
 	// The game's item tooltip, read when the game-menu pin key is pressed and
 	// when the pin hint is added to it. Found by name on first use (Blueprint
@@ -107,15 +109,16 @@ namespace CodexFields
 			SimpleItemSize, NestedCollectionsSize);
 	}
 
-	// A stack's item type and its count, or null / zero when unresolved.
-	inline SDK::UAuItemDataBase* ItemOf(const SDK::FAuSimpleItem& item)
+	// A stack's item type and its count, or null / zero when unresolved. `item`
+	// is the game's FAuSimpleItem, read in place.
+	inline SDK::UAuItemDataBase* ItemOf(const void* item)
 	{
-		return ValueOr<SDK::UAuItemDataBase*>(ItemData, &item);
+		return ValueOr<SDK::UAuItemDataBase*>(ItemData, item);
 	}
 
-	inline int32_t CountOf(const SDK::FAuSimpleItem& item)
+	inline int32_t CountOf(const void* item)
 	{
-		return ValueOr<int32_t>(ItemCount, &item);
+		return ValueOr<int32_t>(ItemCount, item);
 	}
 
 	// An item's unique name and its localized name. Empty when unresolved.
