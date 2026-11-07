@@ -1135,7 +1135,7 @@ int main()
 
 	printf("pin layer arrow\n");
 	{
-		// Shown while a menu is up and a pin is; the pins are tucked only then.
+		// The arrow shows while a menu is up and a pin is; the tuck needs only a pin.
 		int states = 0;
 		for (int pins = 0; pins <= kMaxPins; ++pins)
 			for (int tuck = 0; tuck <= 1; ++tuck)
@@ -1146,11 +1146,34 @@ int main()
 						const std::string where = std::to_string(pins) + " pins, tuck " + std::to_string(tuck) +
 							", menu " + std::to_string(menu) + ", available " + std::to_string(available);
 						Check(s.arrowShown == (pins > 0 && menu && available), "the arrow shows with a pin and a menu up", where);
-						Check(s.pinsTucked == (s.arrowShown && tuck), "the pins are tucked only while the arrow shows and the tuck is set", where);
-						Check(!s.pinsTucked || s.arrowShown, "pins are never tucked without the arrow", where);
+						Check(s.pinsTucked == (pins > 0 && available && tuck), "the pins are tucked whenever the tuck is set and a pin is up, in a menu or not", where);
+						Check(!s.pinsTucked || pins > 0, "no pins are never tucked", where);
+						Check(!s.pinsTucked || available, "pins are never tucked without an arrow to bring them back", where);
 						++states;
 					}
 		printf("  %d states checked\n", states);
+
+		// The tuck stays when the menu closes (the arrow hides), and with no pins
+		// the saved tuck does nothing.
+		{
+			const PinLayerState inMenu = PinLayerNow(3, true, true, true);
+			const PinLayerState outside = PinLayerNow(3, true, false, true);
+			Check(inMenu.arrowShown && inMenu.pinsTucked, "tucked in a menu", "menu");
+			Check(!outside.arrowShown && outside.pinsTucked, "the menu closing hides the arrow and keeps the tuck", "closed");
+			const PinLayerState none = PinLayerNow(0, true, true, true);
+			Check(!none.arrowShown && !none.pinsTucked, "a saved tuck with no pins does nothing", "no pins");
+			const PinLayerState added = PinLayerNow(1, true, false, true);
+			Check(added.pinsTucked, "a pin added while tucked is tucked", "added");
+			const PinLayerState expanded = PinLayerNow(3, false, false, true);
+			Check(!expanded.pinsTucked, "expanded pins show outside a menu", "expanded");
+		}
+
+		// The saved tuck's text: what is written reads back, and anything else is not tucked.
+		Check(PinsTuckedFromText(PinsTuckedText(true)), "a saved tuck reads back tucked", "text on");
+		Check(!PinsTuckedFromText(PinsTuckedText(false)), "a saved expand reads back not tucked", "text off");
+		Check(!PinsTuckedFromText(""), "empty is not tucked", "text empty");
+		Check(!PinsTuckedFromText(nullptr), "no text is not tucked", "text null");
+		Check(!PinsTuckedFromText("true") && !PinsTuckedFromText("2"), "only 1 is tucked", "text other");
 
 		// The collapse ease: 0 to 1, slow at both ends, never outside them.
 		Check(CollapseEase(0.0f) == 0.0f && CollapseEase(1.0f) == 1.0f, "the ease runs from 0 to 1", "ease ends");

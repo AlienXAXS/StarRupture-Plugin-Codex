@@ -5,7 +5,7 @@
 - Click the X on a pin's title bar to unpin it; pins can be moved and unpinned while the Esc menu or the Codex is open, or the cursor is up in a game menu
 - Click the minimize button left of a pin's X to collapse it to its title bar (it shows a down chevron (v) while collapsed; click again to open it); each pin remembers its state
 - Hold Ctrl: Ctrl+X closes every pin, and Ctrl+minimize collapses every pin, or opens them all when all are collapsed
-- While a game menu is open, an arrow button above the top pin tucks all pins into itself with a short animation, so the menu is free to use; it turns into a down arrow that brings them back out. The choice lasts for the session
+- While a game menu is open, an arrow button above the top pin tucks all pins into itself with a short animation, so the menu is free to use; it turns into a down arrow that brings them back out. Tucked pins stay tucked after the menu closes, on every other screen and across restarts, until you expand them from any menu
 - Search with the Up and Down keys and Enter, and drag the search box where you like
 - Planner button opens the item in the StarRupture Planner
 - Needs ModLoader v1.23.0 or later

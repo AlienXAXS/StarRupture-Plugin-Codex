@@ -493,9 +493,11 @@ namespace CodexPinLayout
 	// The pin layer arrow: one button over the pins that tucks them into itself
 	// and brings them back out.
 	//
-	// It shows while a game menu is up and a pin is, and the pins are tucked
-	// only then, so in plain gameplay they show as normal.
-	// `arrowAvailable` is false when the arrow's window could not be made.
+	// The arrow shows while a game menu is up and a pin is, so that is where the
+	// player tucks and expands. The tuck itself outlives the menu: tucked pins
+	// stay tucked on every screen until they are expanded. `arrowAvailable` is
+	// false when the arrow's window could not be made, and with no way to bring
+	// the pins back they are never tucked then.
 	struct PinLayerState
 	{
 		bool arrowShown = false;
@@ -506,8 +508,19 @@ namespace CodexPinLayout
 	{
 		PinLayerState state;
 		state.arrowShown = arrowAvailable && menuUp && pinCount > 0;
-		state.pinsTucked = state.arrowShown && tuckSet;
+		state.pinsTucked = arrowAvailable && pinCount > 0 && tuckSet;
 		return state;
+	}
+
+	// The saved tuck as config text: "1" tucked, "0" or nothing not.
+	inline bool PinsTuckedFromText(const char* text)
+	{
+		return text && text[0] == '1';
+	}
+
+	inline const char* PinsTuckedText(bool tucked)
+	{
+		return tucked ? "1" : "0";
 	}
 
 	// The ease of a collapse: slow at both ends, 0 at t = 0, 1 at t = 1. A pin
