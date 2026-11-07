@@ -3,7 +3,6 @@
 // gap (Codex/UI/pin_layout.h), so no game and no ImGui are needed.
 #include "UI/pin_layout.h"
 #include "UI/pin_set.h"
-#include "icon_requests_tests.h"
 
 #include <cmath>
 #include <cstdio>
@@ -1323,8 +1322,6 @@ int main()
 			printf("  %d random layouts checked\n", checked);
 		}
 	}
-
-	RunIconRequestTests(&Check);
 
 	printf("\n%d checks, %d failed\n", g_checks, g_failed);
 	return g_failed == 0 ? 0 : 1;

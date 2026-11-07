@@ -448,27 +448,11 @@ namespace CodexUI
 				PinItemProducer(imgui, uniqueItemName);
 		}
 
-		// An item's icon and the gap after it. An icon that is still loading
-		// holds its place, so the text beside it does not move when it arrives.
-		// An item with no icon takes no room.
-		void DrawItemIcon(IModLoaderImGui* imgui, IPluginImGuiTextures* textures,
-			const std::string& uniqueItemName, float iconSize)
-		{
-			if (!textures || !CodexIcons::HasIcon(uniqueItemName))
-				return;
-
-			if (PluginTextureHandle icon = CodexIcons::GetIcon(uniqueItemName))
-				textures->Image(icon, iconSize, iconSize);
-			else
-				imgui->Dummy(iconSize, iconSize);
-			imgui->SameLine(0.0f, 6.0f);
-		}
-
 		// Icon (if loaded) + name, as one line. Shared by every recipe list.
 		void RenderRecipeLabel(IModLoaderImGui* imgui, IPluginImGuiTextures* textures,
 			const CodexRecipes::RecipeInfo& recipe, float iconSize)
 		{
-			DrawItemIcon(imgui, textures, recipe.output.uniqueItemName, iconSize);
+			CodexIcons::Draw(imgui, textures, recipe.output.uniqueItemName, iconSize);
 			imgui->Text(recipe.displayName.c_str());
 		}
 
@@ -486,7 +470,7 @@ namespace CodexUI
 			PinOnRightClick(imgui, item.uniqueItemName, isOutput ? g_selectedNativeRecipe : nullptr);
 			imgui->SameLine(0.0f, 0.0f);
 
-			DrawItemIcon(imgui, textures, item.uniqueItemName, iconSize);
+			CodexIcons::Draw(imgui, textures, item.uniqueItemName, iconSize);
 
 			imgui->BeginGroup();
 			imgui->Text(item.displayName.c_str());
@@ -1104,7 +1088,7 @@ namespace CodexUI
 						: "Click to view, right-click to pin");
 				imgui->SameLine(0.0f, 0.0f);
 
-				DrawItemIcon(imgui, textures, recipe.output.uniqueItemName, kIconSize);
+				CodexIcons::Draw(imgui, textures, recipe.output.uniqueItemName, kIconSize);
 
 				imgui->BeginGroup();
 				imgui->Text(recipe.displayName.c_str());
@@ -2863,7 +2847,7 @@ namespace CodexUI
 				// One group, so a right-click on the icon or the text pins the ingredient's recipe.
 				// (The pin's own product is already pinned, so it has no hook.)
 				imgui->BeginGroup();
-				DrawItemIcon(imgui, textures, input.uniqueItemName, kIconSize);
+				CodexIcons::Draw(imgui, textures, input.uniqueItemName, kIconSize);
 				const float rate = info.buildTimeSeconds > 0.0f
 					? (static_cast<float>(input.count) / info.buildTimeSeconds) * 60.0f
 					: 0.0f;
@@ -2880,7 +2864,7 @@ namespace CodexUI
 
 			imgui->Separator();
 
-			DrawItemIcon(imgui, textures, info.output.uniqueItemName, kIconSize);
+			CodexIcons::Draw(imgui, textures, info.output.uniqueItemName, kIconSize);
 			if (info.outputsPerMinute > 0.0f)
 				snprintf(line, sizeof(line), "%dx %s  (%.1f/min)", info.output.count, info.output.displayName.c_str(), info.outputsPerMinute);
 			else
