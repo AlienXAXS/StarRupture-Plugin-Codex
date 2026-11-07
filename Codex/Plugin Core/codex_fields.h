@@ -18,7 +18,8 @@
 // running game build (see plugin_map.h). Resolved once in OnPluginLoadHooks;
 // read on the game thread with In(object), which is null when the object is
 // null. The two structs Codex steps through (an item stack, and the entries of
-// the linked-collections map) also carry a size check.
+// the linked-collections map) also carry a size check. The other structs it
+// reads are single members of a game class; their member rows carry the size.
 
 #define CODEX_FIELD(Class, Member) SR_FIELD(decltype(SDK::Class::Member), Class, Member, 0)
 

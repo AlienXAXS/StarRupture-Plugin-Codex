@@ -8,5 +8,4 @@
 - While a game menu is open, an arrow button above the top pin tucks all pins into itself with a short animation, so the menu is free to use; it turns into a down arrow that brings them back out. The choice lasts for the session
 - Search with the Up and Down keys and Enter, and drag the search box where you like
 - Planner button opens the item in the StarRupture Planner
-- A game update that resizes two game structures the codex never reads by size no longer switches the codex off
 - Needs ModLoader v1.23.0 or later
