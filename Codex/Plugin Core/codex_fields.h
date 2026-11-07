@@ -17,10 +17,21 @@
 // Every member of a game class Codex reads, taken from the loader's map for the
 // running game build (see plugin_map.h). Resolved once in OnPluginLoadHooks;
 // read on the game thread with In(object), which is null when the object is
-// null. Structs Codex only reads through those members are covered by a size
-// check instead of a field per member.
+// null. The two structs Codex steps through (an item stack, and the entries of
+// the linked-collections map) are covered by a size check.
+//
+// The structs Codex holds as single members of a game class, and reads only
+// through their own member rows, are requested at any size
+// (CODEX_FIELD_ANY_SIZE): nothing reads their size, so a build that resizes one
+// does not turn the codex off.
 
 #define CODEX_FIELD(Class, Member) SR_FIELD(decltype(SDK::Class::Member), Class, Member, 0)
+
+// SR_FIELD without the size check: the same typed In(object), but the member
+// may be any size the game reflects (see SR_FIELD_ANY_SIZE).
+#define CODEX_FIELD_ANY_SIZE(Class, Member) \
+	PluginField<decltype(SDK::Class::Member)>{ { #Class "::" #Member, #Class, #Member, PLUGIN_FIELD_ANY_SIZE, 0, \
+	                                             static_cast<int32_t>(offsetof(SDK::Class, Member)) } }
 
 namespace CodexFields
 {
@@ -28,14 +39,14 @@ namespace CodexFields
 	inline auto UniqueItemName    = CODEX_FIELD(UAuItemDataBase, UniqueItemName);
 	inline auto ItemName          = CODEX_FIELD(UAuItemDataBase, ItemName);
 	inline auto ItemIcon          = CODEX_FIELD(UAuItemDataBase, ItemIcon);
-	inline auto EntityType        = CODEX_FIELD(UAuActorPlacementData, EntityType);
+	inline auto EntityType        = CODEX_FIELD_ANY_SIZE(UAuActorPlacementData, EntityType);
 	inline auto BuildingType      = CODEX_FIELD(UCrBuildingData, Type);
 	inline auto BuildingName      = CODEX_FIELD(UCrBuildingData, BuildingName);
 	inline auto LinkedCollections = CODEX_FIELD(UCrItemRecipeCollectionSubsystem, LinkedCollections);
 	inline auto Recipes           = CODEX_FIELD(UCrItemRecipeCollection, Recipes);
 	inline auto RecipeBuildTime   = CODEX_FIELD(UAuItemRecipeData, BuildTime);
 	inline auto RecipeDisplayText = CODEX_FIELD(UCrItemRecipeData, DisplayText);
-	inline auto CraftingParameters = CODEX_FIELD(UCrBuildingCraftingTrait, CraftingParameters);
+	inline auto CraftingParameters = CODEX_FIELD_ANY_SIZE(UCrBuildingCraftingTrait, CraftingParameters);
 	inline auto CrafterToRecipeMap = CODEX_FIELD(ACrCraftingRecipeOwner, CrafterToRecipeMap);
 
 	// Members of the structs the codex steps through
@@ -47,8 +58,6 @@ namespace CodexFields
 	inline auto RecipeCollection   = CODEX_FIELD(FCrCraftingParameters, RecipeCollection);
 
 	inline auto SimpleItemSize        = SR_SIZE_CHECK(FAuSimpleItem);
-	inline auto EntityTypeSize        = SR_SIZE_CHECK(FAuAPMassSpawnedEntityType);
-	inline auto CraftingParametersSize = SR_SIZE_CHECK(FCrCraftingParameters);
 	inline auto NestedCollectionsSize = SR_SIZE_CHECK(FNestedItemRecipeCollectionArray);
 
 	// The game's item tooltip, read when the game-menu pin key is pressed and
@@ -79,7 +88,7 @@ namespace CodexFields
 		KeysOf(UIItemType, UniqueItemName, ItemName, ItemIcon, EntityType, BuildingType, BuildingName,
 			LinkedCollections, Recipes, RecipeBuildTime, RecipeDisplayText, CraftingParameters, CrafterToRecipeMap,
 			ItemCount, ItemData, LinkedList, EntityConfigPtr, EntityConfigRef, RecipeCollection,
-			SimpleItemSize, EntityTypeSize, CraftingParametersSize, NestedCollectionsSize),
+			SimpleItemSize, NestedCollectionsSize),
 		{ "Menu.*", "Planner.*" } };
 
 	// Call before Resolve, so a miss lands on the feature and not on the plugin.
@@ -96,7 +105,7 @@ namespace CodexFields
 			UIItemType, UniqueItemName, ItemName, ItemIcon, EntityType, BuildingType, BuildingName,
 			LinkedCollections, Recipes, RecipeBuildTime, RecipeDisplayText, CraftingParameters, CrafterToRecipeMap,
 			ItemCount, ItemData, LinkedList, EntityConfigPtr, EntityConfigRef, RecipeCollection,
-			SimpleItemSize, EntityTypeSize, CraftingParametersSize, NestedCollectionsSize);
+			SimpleItemSize, NestedCollectionsSize);
 	}
 
 	// A stack's item type and its count, or null / zero when unresolved.
