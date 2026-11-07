@@ -9,4 +9,5 @@
 - Search with the Up and Down keys and Enter, and drag the search box where you like
 - Planner button opens the item in the StarRupture Planner
 - Item icons load the first time they are shown, and Codex no longer holds the loading screen to copy them
+- A game update that resizes a building's entity-type or crafting-settings data no longer switches the codex off
 - Needs ModLoader v1.23.0 or later
