@@ -108,19 +108,21 @@ namespace CodexRecipes
 		// GetOutputItem and GetNeededResources hand back an FAuSimpleItem (or an
 		// array of them) by value through ProcessEvent. The SDK's wrappers hold
 		// the result in a compiled struct; this calls the function with a
-		// parameter block of its live size (PluginMap::ParamsBlock), so a build
-		// that resizes FAuSimpleItem does not turn the codex off. The return
-		// value is the function's only parameter, at offset 0 of the block, and
-		// is read in place from "ReturnValue". The block is empty when the
-		// function is not as expected or the call did not happen.
-		PluginMap::ParamsBlock CallRecipeFunction(SDK::UCrItemRecipeData* recipe, const char* name, uint32_t returnSize)
+		// parameter block of the size the running game gives it, and reads the
+		// return value in place at the offset the game gives it
+		// (PluginMap::ParamsBlockOf), so a build that resizes FAuSimpleItem or
+		// adds a parameter does not turn the codex off or misplace the result.
+		// `returnSize` is the size of the return value the codex reads it as.
+		// The block is empty when the function is not as expected or the call did
+		// not happen.
+		PluginMap::ParamsBlock CallRecipeFunction(SDK::UCrItemRecipeData* recipe, const char* name,
+			const PluginFieldSpec& paramsSize, const PluginFieldSpec& returnValue, uint32_t returnSize)
 		{
 			SDK::UFunction* function = recipe->Class ? recipe->Class->GetFunction("AuItemRecipeData", name) : nullptr;
-			const uint32_t parmsSize = function ? static_cast<uint32_t>(function->Size) : 0;
-			PluginMap::ParamsBlock call(parmsSize, { { "ReturnValue", 0, returnSize } });
-			if (!call || parmsSize != returnSize)
+			PluginMap::ParamsBlock call = PluginMap::ParamsBlockOf(paramsSize, { &returnValue });
+			if (!function || !call || returnValue.resolvedSize != returnSize)
 			{
-				RejectLayout(name, "its return value is not the function's only parameter");
+				RejectLayout(name, "its return value is not the size the codex reads");
 				return PluginMap::ParamsBlock(0, {});
 			}
 
@@ -613,7 +615,8 @@ namespace CodexRecipes
 			info.key              = recipeName;
 			info.buildTimeSeconds = CodexFields::ValueOr<float>(CodexFields::RecipeBuildTime, recipe);
 
-			PluginMap::ParamsBlock output = CallRecipeFunction(recipe, "GetOutputItem", CodexFields::SimpleItemSize.resolvedSize);
+			PluginMap::ParamsBlock output = CallRecipeFunction(recipe, "GetOutputItem",
+				CodexFields::OutputItemParamsSize, CodexFields::OutputItemReturn, CodexFields::SimpleItemSize.resolvedSize);
 			const uint8_t* outputItem = output.Param("ReturnValue");
 			if (!outputItem)
 			{
@@ -642,7 +645,8 @@ namespace CodexRecipes
 
 			// The returned array's elements are FAuSimpleItem at the live size, so
 			// they are stepped by it (the array is typed as bytes) and read in place.
-			PluginMap::ParamsBlock needed = CallRecipeFunction(recipe, "GetNeededResources", sizeof(SDK::TArray<uint8_t>));
+			PluginMap::ParamsBlock needed = CallRecipeFunction(recipe, "GetNeededResources",
+				CodexFields::NeededResourcesParamsSize, CodexFields::NeededResourcesReturn, sizeof(SDK::TArray<uint8_t>));
 			const auto* resources = reinterpret_cast<const SDK::TArray<uint8_t>*>(needed.Param("ReturnValue"));
 			if (!resources)
 			{

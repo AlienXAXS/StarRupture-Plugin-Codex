@@ -5,6 +5,7 @@
 #include "Chimera_structs.hpp"
 #include "AuCrafting_classes.hpp"
 #include "AuCrafting_structs.hpp"
+#include "AuCrafting_parameters.hpp"
 #include "AuItems_classes.hpp"
 #include "AuItems_structs.hpp"
 #include "AuActorPlacement_classes.hpp"
@@ -61,6 +62,13 @@ namespace CodexFields
 	inline auto SimpleItemSize        = SR_SIZE(FAuSimpleItem);
 	inline auto NestedCollectionsSize = SR_SIZE(FNestedItemRecipeCollectionArray);
 
+	// The recipe functions' parameter blocks: each one's size and where the game
+	// puts its return value (see PluginMap::ParamsBlockOf).
+	inline auto OutputItemParamsSize      = SR_PARAMS_SIZE(AuItemRecipeData, GetOutputItem);
+	inline auto OutputItemReturn          = SR_PARAM(AuItemRecipeData, GetOutputItem, ReturnValue);
+	inline auto NeededResourcesParamsSize = SR_PARAMS_SIZE(AuItemRecipeData, GetNeededResources);
+	inline auto NeededResourcesReturn     = SR_PARAM(AuItemRecipeData, GetNeededResources, ReturnValue);
+
 	// The game's item tooltip, read when the game-menu pin key is pressed and
 	// when the pin hint is added to it. Found by name on first use (Blueprint
 	// members have no SDK offset to compile in); a miss leaves that one key and
@@ -89,7 +97,8 @@ namespace CodexFields
 		KeysOf(UIItemType, UniqueItemName, ItemName, ItemIcon, EntityType, BuildingType, BuildingName,
 			LinkedCollections, Recipes, RecipeBuildTime, RecipeDisplayText, CraftingParameters, CrafterToRecipeMap,
 			ItemCount, ItemData, LinkedList, EntityConfigPtr, EntityConfigRef, RecipeCollection,
-			SimpleItemSize, NestedCollectionsSize),
+			SimpleItemSize, NestedCollectionsSize,
+			OutputItemParamsSize, OutputItemReturn, NeededResourcesParamsSize, NeededResourcesReturn),
 		{ "Menu.*", "Planner.*" } };
 
 	// Call before Resolve, so a miss lands on the feature and not on the plugin.
@@ -106,7 +115,8 @@ namespace CodexFields
 			UIItemType, UniqueItemName, ItemName, ItemIcon, EntityType, BuildingType, BuildingName,
 			LinkedCollections, Recipes, RecipeBuildTime, RecipeDisplayText, CraftingParameters, CrafterToRecipeMap,
 			ItemCount, ItemData, LinkedList, EntityConfigPtr, EntityConfigRef, RecipeCollection,
-			SimpleItemSize, NestedCollectionsSize);
+			SimpleItemSize, NestedCollectionsSize,
+			OutputItemParamsSize, OutputItemReturn, NeededResourcesParamsSize, NeededResourcesReturn);
 	}
 
 	// A stack's item type and its count, or null / zero when unresolved. `item`
