@@ -9,7 +9,6 @@
 - Search with the Up and Down keys and Enter, and drag the search box where you like
 - Planner button opens the item in the StarRupture Planner
 - Item icons load the first time they are shown, and Codex no longer holds the loading screen to copy them
-- A game update that resizes a building's entity-type or crafting-settings data no longer switches the codex off
-- A game update that resizes the item-stack or linked-recipe data no longer switches the codex off; if the game's recipe data stops matching what the codex reads, the codex stays off with one log line instead of reading wrong memory
-- A game update that adds or moves a parameter of the recipe functions no longer makes the codex read a wrong result; the codex asks the game where the parameters are
-- Needs ModLoader v1.23.0 or later
+- Codex reads the size of its recipe and item data, and where the recipe functions put their results, from the ModLoader's version object map, so a game update that changes them no longer needs a new Codex
+- If the game's recipe data stops matching what Codex reads, or the loader's version map lacks those entries, Codex stays off and logs one line instead of reading wrong data
+- Needs ModLoader v1.23.2 or later
