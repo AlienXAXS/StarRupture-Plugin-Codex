@@ -423,8 +423,8 @@ namespace CodexUI
 			ShowDetailPanel();
 		}
 
-		// The icon beside a name + sub-line: as tall as the two lines of text, from
-		// the current font and style (never under PluginImages::kMinSize).
+		// The icon beside a name + sub-line: a little taller than the two lines of
+		// text, from the current font and style (never under PluginImages::kMinSize).
 		float TwoLineIconSize(IModLoaderImGui* imgui)
 		{
 			return CodexRowSize::TwoLineIconSize(
@@ -442,9 +442,19 @@ namespace CodexUI
 			return (std::max)(iconSize, textHeight) + 4.0f;
 		}
 
-		// The icon and row height of a one-line recipe row (search results, the
-		// consumers popup): the smallest picture the library draws.
-		constexpr float kRecipeLabelIconSize = PluginImages::kMinSize;
+		// The icon beside one line of text (search results, the consumers popup, the
+		// pinned windows): never under PluginImages::kMinSize, growing with the font.
+		float OneLineIconSize(IModLoaderImGui* imgui)
+		{
+			return CodexRowSize::OneLineIconSize(imgui->GetTextLineHeight(), PluginImages::kMinSize);
+		}
+
+		// The height of a one-line row: the icon, or the text line when the font is
+		// taller than the icon.
+		float OneLineRowHeight(IModLoaderImGui* imgui, float iconSize)
+		{
+			return (std::max)(iconSize, imgui->GetTextLineHeight());
+		}
 
 		// Right-click on the item just drawn pins a recipe: `recipe` when the item
 		// is that recipe's own product, otherwise the one that makes the item.
@@ -546,6 +556,7 @@ namespace CodexUI
 			imgui->Text(title);
 			imgui->Separator();
 
+			const float iconSize = OneLineIconSize(imgui);
 			std::vector<CodexRecipes::RecipeInfo> consumers = CodexRecipes::FindConsumersOfItem(g_consumersItemName);
 			if (consumers.empty())
 			{
@@ -556,10 +567,10 @@ namespace CodexUI
 				for (const CodexRecipes::RecipeInfo& consumer : consumers)
 				{
 					PushIDPtr(imgui, consumer.nativeRecipe);
-					bool clicked = imgui->SelectableFull("##consumer_row", false, kSelectableFlags, 0.0f, kRecipeLabelIconSize);
+					bool clicked = imgui->SelectableFull("##consumer_row", false, kSelectableFlags, 0.0f, OneLineRowHeight(imgui, iconSize));
 					PinOnRightClick(imgui, consumer.output.uniqueItemName, consumer.nativeRecipe);
 					imgui->SameLine(0.0f, 0.0f);
-					RenderRecipeLabel(imgui, consumer, kRecipeLabelIconSize);
+					RenderRecipeLabel(imgui, consumer, iconSize);
 					if (consumer.hasTierVariants)
 					{
 						char tierLabel[32];
@@ -901,15 +912,16 @@ namespace CodexUI
 
 			imgui->Separator();
 
+			const float iconSize = OneLineIconSize(imgui);
 			int row = 0;
 			for (const CodexRecipes::RecipeInfo* recipe : recipes)
 			{
 				PushIDPtr(imgui, recipe->nativeRecipe);
-				bool clicked = imgui->SelectableFull("##recipe_row", row == g_searchHighlight, kSelectableFlags, 0.0f, kRecipeLabelIconSize);
+				bool clicked = imgui->SelectableFull("##recipe_row", row == g_searchHighlight, kSelectableFlags, 0.0f, OneLineRowHeight(imgui, iconSize));
 				PinOnRightClick(imgui, recipe->output.uniqueItemName, recipe->nativeRecipe);
 				SyncSearchHighlight(imgui, row, mouseMoved, arrowSteps != 0);
 				imgui->SameLine(0.0f, 0.0f);
-				RenderRecipeLabel(imgui, *recipe, kRecipeLabelIconSize);
+				RenderRecipeLabel(imgui, *recipe, iconSize);
 
 				// Tiered recipes share a name - the building tells them apart.
 				imgui->SameLine(0.0f, 10.0f);
@@ -933,7 +945,7 @@ namespace CodexUI
 			for (const CodexRecipes::BuildingGroup* group : buildings)
 			{
 				imgui->PushIDStr(group->displayName.c_str());
-				bool clicked = imgui->SelectableFull("##building_row", row == g_searchHighlight, kSelectableFlags, 0.0f, 22.0f);
+				bool clicked = imgui->SelectableFull("##building_row", row == g_searchHighlight, kSelectableFlags, 0.0f, OneLineRowHeight(imgui, iconSize));
 				SyncSearchHighlight(imgui, row, mouseMoved, arrowSteps != 0);
 				imgui->SameLine(0.0f, 0.0f);
 				imgui->Text(group->displayName.c_str());
@@ -2858,20 +2870,18 @@ namespace CodexUI
 			CommitPinnedRecipes();
 		}
 
-		// Pinned cards show their edit controls (the unpin X, Open and Planner)
-		// while the Codex is open, a game screen has the mouse cursor up (the
-		// Escape menu, a machine menu, the recipe station, the inventory, the
-		// build menu), or a loader or plugin window holds the cursor (the mod
-		// loader menu). The arrow over the pins shows on the same game screens.
+		// Pinned cards show their controls (the unpin X, the "_" collapse button, Open
+		// and Planner), and the arrow over the pins shows, while the Codex is open, a
+		// game screen has the mouse cursor up (the Escape menu, a machine menu, the
+		// recipe station, the inventory, the build menu), or the loader's overlay
+		// is open. Both ask this one function.
 		bool PinsEditable(IModLoaderImGui* imgui)
 		{
-			if (CodexUIActive(imgui))
-				return true;
 			IPluginHooks* hooks = GetHooks();
-			if (!hooks)
-				return false;
-			return CodexTooltipPin::PinLayerMenuUp(CodexTooltipPin::UIState())
-				|| (hooks->UI && hooks->UI->IsOverlayOpen());
+			return CodexPinLayout::PinsInteractive(
+				CodexUIActive(imgui),
+				CodexTooltipPin::PinLayerMenuUp(CodexTooltipPin::UIState()),
+				hooks && hooks->UI && hooks->UI->IsOverlayOpen());
 		}
 
 		// Every pin has been drawn and placed, so its window has a size and a spot.
@@ -2884,11 +2894,11 @@ namespace CodexUI
 		}
 
 		// Works out whether the arrow shows and the pins are tucked this frame; run
-		// by the first pin's render and by the arrow's own. The menus are the
+		// by the first pin's render and by the arrow's own. The game screens are the
 		// loader's UI state bits, as of its last game tick. The arrow's window stays
 		// up while the pins are tucked, even with no menu, so this keeps running and
-		// brings the arrow back when a menu opens.
-		void UpdatePinLayer()
+		// brings the arrow back when the controls show again.
+		void UpdatePinLayer(IModLoaderImGui* imgui)
 		{
 			// Saved tucked: once the restored pins have settled they go in at once.
 			if (g_tuckRestore && g_layerWidget && PinCount() > 0)
@@ -2905,9 +2915,8 @@ namespace CodexUI
 				}
 			}
 
-			const bool menuUp = CodexTooltipPin::PinLayerMenuUp(CodexTooltipPin::UIState());
 			g_layerState = CodexPinLayout::PinLayerNow(
-				PinCount(), g_pinsTucked.load(std::memory_order_relaxed), menuUp, g_layerWidget != nullptr);
+				PinCount(), g_pinsTucked.load(std::memory_order_relaxed), PinsEditable(imgui), g_layerWidget != nullptr);
 			SetPinLayerArrowShown(g_layerState.arrowShown || g_layerState.pinsTucked);
 		}
 
@@ -2921,7 +2930,8 @@ namespace CodexUI
 				return;
 			}
 
-			constexpr float kIconSize = kRecipeLabelIconSize;
+			const float iconSize = OneLineIconSize(imgui);
+
 
 			char line[256];
 			snprintf(line, sizeof(line), "%s  -  %.1fs", info.buildingName.c_str(), info.buildTimeSeconds);
@@ -2932,7 +2942,7 @@ namespace CodexUI
 				// One group, so a right-click on the icon or the text pins the ingredient's recipe.
 				// (The pin's own product is already pinned, so it has no hook.)
 				imgui->BeginGroup();
-				CodexIcons::Draw(imgui, input.itemImage, kIconSize);
+				CodexIcons::Draw(imgui, input.itemImage, iconSize);
 				const float rate = info.buildTimeSeconds > 0.0f
 					? (static_cast<float>(input.count) / info.buildTimeSeconds) * 60.0f
 					: 0.0f;
@@ -2949,7 +2959,7 @@ namespace CodexUI
 
 			imgui->Separator();
 
-			CodexIcons::Draw(imgui, info.output.itemImage, kIconSize);
+			CodexIcons::Draw(imgui, info.output.itemImage, iconSize);
 			if (info.outputsPerMinute > 0.0f)
 				snprintf(line, sizeof(line), "%dx %s  (%.1f/min)", info.output.count, info.output.displayName.c_str(), info.outputsPerMinute);
 			else
@@ -2995,7 +3005,7 @@ namespace CodexUI
 			{
 				AdvancePinClock(imgui);
 				UpdatePinGrouping(imgui);
-				UpdatePinLayer();
+				UpdatePinLayer(imgui);
 			}
 
 			// Grouped: dragging any pin moves the whole group. The lead is moved by
@@ -3160,7 +3170,7 @@ namespace CodexUI
 			// With the pins tucked away their windows do not run the frame's setup.
 			if (g_tuckT > 0.0f)
 				AdvancePinClock(imgui);
-			UpdatePinLayer();
+			UpdatePinLayer(imgui);
 
 			// Tucked with no menu up there is no button: the window is empty and takes
 			// no mouse, and is only here to keep this running for the next menu.

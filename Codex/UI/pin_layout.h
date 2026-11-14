@@ -494,8 +494,8 @@ namespace CodexPinLayout
 	// The pin layer arrow: one button over the pins that tucks them into itself
 	// and brings them back out.
 	//
-	// The arrow shows while a game menu is up and a pin is, so that is where the
-	// player tucks and expands. The tuck itself outlives the menu: tucked pins
+	// The arrow shows while the pins' controls do (see PinsInteractive) and a pin
+	// is up, so that is where the player tucks and expands. The tuck itself outlives the menu: tucked pins
 	// stay tucked on every screen until they are expanded. `arrowAvailable` is
 	// false when the arrow's window could not be made, and with no way to bring
 	// the pins back they are never tucked then.
@@ -505,23 +505,32 @@ namespace CodexPinLayout
 		bool pinsTucked = false;
 	};
 
-	// Whether the screen counts as a menu for the arrow: the Escape menu, or any
-	// screen with the game cursor up. These are the loader's PAUSE_MENU and
-	// CURSOR_UP bits, which are also where the loader gives ImGui the mouse, so the
-	// arrow shows only where it can be clicked. The build menu is one of those
+	// Whether the game screen counts as a menu: the Escape menu, or any screen
+	// with the game cursor up. These are the loader's PAUSE_MENU and CURSOR_UP
+	// bits, which are also where the loader gives ImGui the mouse, so what shows
+	// here can be clicked. The build menu is one of those
 	// screens: the loader reports no menu bit for it, only the cursor up, and the
-	// cursor clears while a building is being placed. The pinned cards' controls
-	// follow these same two bits (they also show while the Codex or a loader window
-	// is open, which the arrow does not).
+	// cursor clears while a building is being placed. PinsInteractive adds the
+	// Codex window and the loader's overlay to these two bits.
 	inline bool PinLayerMenuUp(bool pauseMenu, bool cursorUp)
 	{
 		return pauseMenu || cursorUp;
 	}
 
-	inline PinLayerState PinLayerNow(int pinCount, bool tuckSet, bool menuUp, bool arrowAvailable)
+	// Whether the pinned cards' controls (the unpin X, the "_" collapse button, Open,
+	// Planner) and the tuck arrow show: the Codex window is open, a game screen
+	// counts as a menu (PinLayerMenuUp), or the loader's overlay is open. One
+	// function for both, so they cannot disagree. Plain gameplay, and placing a
+	// building, show neither.
+	inline bool PinsInteractive(bool codexOpen, bool menuUp, bool overlayOpen)
+	{
+		return codexOpen || menuUp || overlayOpen;
+	}
+
+	inline PinLayerState PinLayerNow(int pinCount, bool tuckSet, bool interactive, bool arrowAvailable)
 	{
 		PinLayerState state;
-		state.arrowShown = arrowAvailable && menuUp && pinCount > 0;
+		state.arrowShown = arrowAvailable && interactive && pinCount > 0;
 		state.pinsTucked = arrowAvailable && pinCount > 0 && tuckSet;
 		return state;
 	}
@@ -601,15 +610,16 @@ namespace CodexPinLayout
 }
 
 // The size of an item icon that stands beside two lines of text (a name and a
-// sub-line), from the current font and style at draw time.
+// sub-line), from the current font and style at draw time: a little taller than
+// the two lines.
 //
 // The image library keeps a sharp copy per picture and size, at most three sizes
 // per picture and 256 copies shared by all plugins, and a size that keeps
 // changing never gets its copy and stays soft. So Codex draws a picture at no
 // more than two sizes: this one for every two-line row (the recipe detail rows
-// and the tier grid), PluginImages::kMinSize for every one-line row. The size is
-// a whole number of pixels worked out from the font alone, so it only changes
-// when the font does.
+// and the tier grid), OneLineIconSize for every one-line row. Both are whole
+// numbers of pixels worked out from the font alone, so they only change when the
+// font does.
 namespace CodexRowSize
 {
 	// How far the sub-line is pulled up under the name, in pixels: the default item
@@ -619,16 +629,31 @@ namespace CodexRowSize
 	// The size of the picture the library stores: a size from here up is not copied.
 	constexpr float kMaxIconSize = 256.0f;
 
+	// The icon over the two text lines: about 40 px beside 32 px of text at the default font.
+	constexpr float kIconOverText = 1.25f;
+
+	// Sizes are given at the default 15 px font and scale with it.
+	constexpr float kDefaultFontPx = 15.0f;
+	constexpr float kOneLineIconAtDefault = 28.0f;
+
 	// The height of the name line and the sub-line together.
 	inline float TwoLineTextHeight(float lineHeight, float lineHeightWithSpacing)
 	{
 		return lineHeightWithSpacing + lineHeight - kSubLinePullUp;
 	}
 
-	// An icon as tall as those two lines, in whole pixels, never under minSize
-	// (PluginImages::kMinSize) and never over kMaxIconSize.
+	// The icon: kIconOverText times the height of those two lines, in whole pixels,
+	// never under minSize (PluginImages::kMinSize) and never over kMaxIconSize.
 	inline float TwoLineIconSize(float lineHeight, float lineHeightWithSpacing, float minSize)
 	{
-		return std::clamp(std::round(TwoLineTextHeight(lineHeight, lineHeightWithSpacing)), minSize, kMaxIconSize);
+		return std::clamp(std::round(TwoLineTextHeight(lineHeight, lineHeightWithSpacing) * kIconOverText), minSize, kMaxIconSize);
+	}
+
+	// The icon beside one line of text: kOneLineIconAtDefault at the default font,
+	// growing with the font, in whole pixels, never under minSize
+	// (PluginImages::kMinSize) and never over kMaxIconSize.
+	inline float OneLineIconSize(float lineHeight, float minSize)
+	{
+		return std::clamp(std::round(kOneLineIconAtDefault * lineHeight / kDefaultFontPx), minSize, kMaxIconSize);
 	}
 }

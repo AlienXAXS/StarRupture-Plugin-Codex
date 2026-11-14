@@ -37,7 +37,8 @@ what it produces.
   up arrow** tucks the pins into itself: each one shrinks into the button and disappears, so the
   menu underneath can be used. The arrow then turns into a **double down arrow**, which brings
   them back out the same way. The arrow always stays clickable. It shows in the build menu too,
-  while the game cursor is up; while you are placing a building it stays hidden. Tucked pins stay tucked
+  and whenever the pins' own buttons show: while the Codex or the mod loader menu is open, or
+  while the mouse cursor is showing. While you are placing a building it stays hidden. Tucked pins stay tucked
   after the menu closes and on every other screen, and across a restart or RELOAD: they stay
   out of the way in gameplay until you open a menu and click the arrow to expand them. A pin
   you add while the pins are tucked is tucked with them. The first pin after none, and unpinning
@@ -47,8 +48,8 @@ what it produces.
   drawn from the ModLoader's shared image library, which reads each one the first time it is
   shown and keeps a small copy for the session. Codex no longer loads or holds icons of its own,
   and does not hold the loading screen for them. A row whose icon is still loading keeps its
-  place, so nothing moves when the icon appears. Item pictures beside a name and a second line
-  (the recipe detail and the building's recipe list) are as tall as those two lines.
+  place, so nothing moves when the icon appears. Item pictures in the recipe lists are bigger,
+  about 40 px, and all item pictures grow with the mod loader's font setting.
 
 ---
 

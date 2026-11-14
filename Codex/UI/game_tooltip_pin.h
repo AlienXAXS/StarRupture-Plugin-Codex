@@ -17,15 +17,18 @@ namespace CodexTooltipPin
 
 	// The loader's UI state bits Codex follows: the pause menu, and a game screen
 	// having the mouse cursor up (a machine menu, the recipe station, the inventory).
-	inline constexpr uint64_t kUIStateMask = PLUGIN_UI_PAUSE_MENU | PLUGIN_UI_CURSOR_UP;
+	inline constexpr uint64_t kPauseMenuBit = PLUGIN_UI_PAUSE_MENU;
+	inline constexpr uint64_t kCursorUpBit = PLUGIN_UI_CURSOR_UP;
+	inline constexpr uint64_t kUIStateMask = kPauseMenuBit | kCursorUpBit;
 
 	// True while the Escape menu is up or a game screen has the game cursor up
-	// (a machine menu, the recipe station, the inventory, the build menu), so the
-	// pin layer arrow never shows in plain gameplay. The pinned cards' controls
-	// use the same function for these screens (CodexPinLayout::PinLayerMenuUp).
+	// (a machine menu, the recipe station, the inventory, the build menu). It is
+	// one input of CodexPinLayout::PinsInteractive, which decides when the pinned
+	// cards' controls and the pin layer arrow show.
 	inline bool PinLayerMenuUp(uint64_t state)
 	{
-		return CodexPinLayout::PinLayerMenuUp((state & PLUGIN_UI_PAUSE_MENU) != 0, (state & PLUGIN_UI_CURSOR_UP) != 0);
+		static_assert((kPauseMenuBit | kCursorUpBit) == kUIStateMask, "the bits tested here are the bits the loader is asked for");
+		return CodexPinLayout::PinLayerMenuUp((state & kPauseMenuBit) != 0, (state & kCursorUpBit) != 0);
 	}
 
 	// The loader's UI state as of its last game tick. Only the bits in
