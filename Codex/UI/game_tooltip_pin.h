@@ -19,28 +19,17 @@ namespace CodexTooltipPin
 	// having the mouse cursor up (a machine menu, the recipe station, the inventory).
 	inline constexpr uint64_t kUIStateMask = PLUGIN_UI_PAUSE_MENU | PLUGIN_UI_CURSOR_UP;
 
-	// The menus the pin layer arrow shows in: every game menu. ANY_MENU is the
-	// loader's menu-layer bit, set for each screen on the menu layer (a machine's
-	// screen, a station, the map, the inventory). The loader reads the menu-layer
-	// bits from the game every tick while a plugin asks for them, so Codex asks
-	// only while a pin is up (WatchPinMenus).
-	inline constexpr uint64_t kPinLayerMenus = PLUGIN_UI_PAUSE_MENU | PLUGIN_UI_ANY_MENU;
-
-	// True while a game menu is up and the game cursor with it, so the pin layer
-	// arrow never shows in plain gameplay (CodexPinLayout::PinLayerMenuUp).
+	// True while the Escape menu is up or a game screen has the game cursor up
+	// (a machine menu, the recipe station, the inventory, the build menu), so the
+	// pin layer arrow never shows in plain gameplay. The pinned cards' controls
+	// follow the same bits (CodexPinLayout::PinLayerMenuUp).
 	inline bool PinLayerMenuUp(uint64_t state)
 	{
-		return CodexPinLayout::PinLayerMenuUp((state & PLUGIN_UI_PAUSE_MENU) != 0,
-			(state & PLUGIN_UI_ANY_MENU) != 0, (state & PLUGIN_UI_CURSOR_UP) != 0);
+		return CodexPinLayout::PinLayerMenuUp((state & PLUGIN_UI_PAUSE_MENU) != 0, (state & PLUGIN_UI_CURSOR_UP) != 0);
 	}
 
-	// Starts or stops asking the loader for the menu-layer bits. Idempotent.
-	// Any thread.
-	void WatchPinMenus(bool on);
-
 	// The loader's UI state as of its last game tick. Only the bits in
-	// kUIStateMask, and kPinLayerMenus while WatchPinMenus is on, are kept
-	// current. Safe from any thread.
+	// kUIStateMask are kept current. Safe from any thread.
 	uint64_t UIState();
 	void Tick(float deltaSeconds);
 	void Shutdown(IPluginSelf* self);

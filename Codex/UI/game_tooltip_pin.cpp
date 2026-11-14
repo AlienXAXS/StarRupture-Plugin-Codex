@@ -254,30 +254,10 @@ namespace CodexTooltipPin
 		bool g_hintsOn = false;                // Menu.GameTooltipHints, read once at Init
 		std::atomic<uint64_t> g_uiState{ 0 }; // the loader's UI state, for the render thread
 
-		std::atomic<bool> g_watchingMenus{ false };
-		IPluginGameMenu* g_gameMenu = nullptr;
-
-		// Temporary, for a build-menu test at INFO: the menu bits are also watched
-		// for the build menu, and each change of these bits while it is (or was)
-		// up is logged.
-		constexpr uint64_t kBuildMenuLogged = PLUGIN_UI_BUILD_MENU | PLUGIN_UI_ANY_MENU | PLUGIN_UI_CURSOR_UP;
-
 		// Game thread, from the loader's tick, when a bit Codex follows changes.
 		void OnUIStateChanged(uint64_t /*oldState*/, uint64_t newState, void* /*userData*/)
 		{
-			const uint64_t was = g_uiState.exchange(newState, std::memory_order_relaxed);
-			if (((was | newState) & PLUGIN_UI_BUILD_MENU) && ((was ^ newState) & kBuildMenuLogged))
-				LOG_INFO("CodexTooltipPin: UI state 0x%llX -> 0x%llX: build menu %d, any menu %d, cursor up %d.",
-					static_cast<unsigned long long>(was), static_cast<unsigned long long>(newState),
-					(newState & PLUGIN_UI_BUILD_MENU) ? 1 : 0, (newState & PLUGIN_UI_ANY_MENU) ? 1 : 0,
-					(newState & PLUGIN_UI_CURSOR_UP) ? 1 : 0);
-		}
-
-		// The same, for the menu-layer bits: a second registration, so it can come and go
-		// on its own (the same callback and userData twice would be ignored).
-		void OnMenuStateChanged(uint64_t oldState, uint64_t newState, void* userData)
-		{
-			OnUIStateChanged(oldState, newState, userData);
+			g_uiState.store(newState, std::memory_order_relaxed);
 		}
 
 		void HintProblem(const std::string& what)
@@ -648,29 +628,13 @@ namespace CodexTooltipPin
 		return g_uiState.load(std::memory_order_relaxed);
 	}
 
-	void WatchPinMenus(bool on)
-	{
-		if (!g_gameMenu || g_watchingMenus.exchange(on) == on)
-			return;
-		if (on)
-			g_gameMenu->RegisterOnUIStateChanged(kPinLayerMenus | PLUGIN_UI_BUILD_MENU, &OnMenuStateChanged, nullptr);
-		else
-		{
-			g_gameMenu->UnregisterOnUIStateChanged(&OnMenuStateChanged, nullptr);
-			// The loader stops reading these bits; drop the ones only it set, so a
-			// later watch does not start from a stale value.
-			g_uiState.fetch_and(~((kPinLayerMenus | PLUGIN_UI_BUILD_MENU) & ~kUIStateMask), std::memory_order_relaxed);
-		}
-	}
-
 	void Init(IPluginSelf* self)
 	{
 		if (!self->hooks->Input || !self->hooks->UI)
 			return;
 
-		g_gameMenu = self->hooks->GameMenu;
-		if (g_gameMenu)
-			g_gameMenu->RegisterOnUIStateChanged(kUIStateMask, &OnUIStateChanged, nullptr);
+		if (self->hooks->GameMenu)
+			self->hooks->GameMenu->RegisterOnUIStateChanged(kUIStateMask, &OnUIStateChanged, nullptr);
 
 		g_hintsOn = CodexConfig::Config::GetGameTooltipHints();
 
@@ -746,12 +710,7 @@ namespace CodexTooltipPin
 		if (self && self->hooks->Input && self->hooks->UI)
 		{
 			if (self->hooks->GameMenu)
-			{
 				self->hooks->GameMenu->UnregisterOnUIStateChanged(&OnUIStateChanged, nullptr);
-				self->hooks->GameMenu->UnregisterOnUIStateChanged(&OnMenuStateChanged, nullptr);
-			}
-			g_watchingMenus.store(false);
-			g_gameMenu = nullptr;
 			self->hooks->Input->UnregisterKeybindByName(CodexConfig::Config::GetGamePinKey(), EModKeyEvent::Pressed, &OnPinKeyPressed);
 			const std::string plannerKey = CodexConfig::Config::GetGamePlannerKey();
 			if (!plannerKey.empty())

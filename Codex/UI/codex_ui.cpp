@@ -423,15 +423,28 @@ namespace CodexUI
 			ShowDetailPanel();
 		}
 
+		// The icon beside a name + sub-line: as tall as the two lines of text, from
+		// the current font and style (never under PluginImages::kMinSize).
+		float TwoLineIconSize(IModLoaderImGui* imgui)
+		{
+			return CodexRowSize::TwoLineIconSize(
+				imgui->GetTextLineHeight(), imgui->GetTextLineHeightWithSpacing(), PluginImages::kMinSize);
+		}
+
 		// Height of a row showing an icon beside a name + sub-line (the
-		// sub-line is pulled up 4px, see RenderItemRow). Sized from whichever
+		// sub-line is pulled up, see RenderItemRow). Sized from whichever
 		// is taller, so larger UI font scales don't push the sub-line past the
 		// row's clickable area.
 		float TwoLineRowHeight(IModLoaderImGui* imgui, float iconSize)
 		{
-			const float textHeight = imgui->GetTextLineHeightWithSpacing() + imgui->GetTextLineHeight() - 4.0f;
+			const float textHeight = CodexRowSize::TwoLineTextHeight(
+				imgui->GetTextLineHeight(), imgui->GetTextLineHeightWithSpacing());
 			return (std::max)(iconSize, textHeight) + 4.0f;
 		}
+
+		// The icon and row height of a one-line recipe row (search results, the
+		// consumers popup): the smallest picture the library draws.
+		constexpr float kRecipeLabelIconSize = PluginImages::kMinSize;
 
 		// Right-click on the item just drawn pins a recipe: `recipe` when the item
 		// is that recipe's own product, otherwise the one that makes the item.
@@ -487,7 +500,7 @@ namespace CodexUI
 
 			// Pull the sub-line up closer to the name; the default item
 			// spacing leaves it too low, bleeding past the row's bottom edge.
-			imgui->SetCursorPosY(imgui->GetCursorPosY() - 4.0f);
+			imgui->SetCursorPosY(imgui->GetCursorPosY() - CodexRowSize::kSubLinePullUp);
 			imgui->TextDisabled(sub);
 			imgui->EndGroup();
 
@@ -543,10 +556,10 @@ namespace CodexUI
 				for (const CodexRecipes::RecipeInfo& consumer : consumers)
 				{
 					PushIDPtr(imgui, consumer.nativeRecipe);
-					bool clicked = imgui->SelectableFull("##consumer_row", false, kSelectableFlags, 0.0f, 22.0f);
+					bool clicked = imgui->SelectableFull("##consumer_row", false, kSelectableFlags, 0.0f, kRecipeLabelIconSize);
 					PinOnRightClick(imgui, consumer.output.uniqueItemName, consumer.nativeRecipe);
 					imgui->SameLine(0.0f, 0.0f);
-					RenderRecipeLabel(imgui, consumer, 18.0f);
+					RenderRecipeLabel(imgui, consumer, kRecipeLabelIconSize);
 					if (consumer.hasTierVariants)
 					{
 						char tierLabel[32];
@@ -892,11 +905,11 @@ namespace CodexUI
 			for (const CodexRecipes::RecipeInfo* recipe : recipes)
 			{
 				PushIDPtr(imgui, recipe->nativeRecipe);
-				bool clicked = imgui->SelectableFull("##recipe_row", row == g_searchHighlight, kSelectableFlags, 0.0f, 22.0f);
+				bool clicked = imgui->SelectableFull("##recipe_row", row == g_searchHighlight, kSelectableFlags, 0.0f, kRecipeLabelIconSize);
 				PinOnRightClick(imgui, recipe->output.uniqueItemName, recipe->nativeRecipe);
 				SyncSearchHighlight(imgui, row, mouseMoved, arrowSteps != 0);
 				imgui->SameLine(0.0f, 0.0f);
-				RenderRecipeLabel(imgui, *recipe, 18.0f);
+				RenderRecipeLabel(imgui, *recipe, kRecipeLabelIconSize);
 
 				// Tiered recipes share a name - the building tells them apart.
 				imgui->SameLine(0.0f, 10.0f);
@@ -1019,7 +1032,7 @@ namespace CodexUI
 
 			imgui->Separator();
 
-			constexpr float kIconSize = 32.0f;
+			const float iconSize = TwoLineIconSize(imgui);
 
 			if (imgui->BeginTable("##Codex_Detail_Columns", 2, 0))
 			{
@@ -1037,11 +1050,11 @@ namespace CodexUI
 					const float rate = info.buildTimeSeconds > 0.0f
 						? (static_cast<float>(input.count) / info.buildTimeSeconds) * 60.0f
 						: 0.0f;
-					RenderItemRow(imgui, input, kIconSize, rate, false, static_cast<int>(i));
+					RenderItemRow(imgui, input, iconSize, rate, false, static_cast<int>(i));
 				}
 
 				imgui->TableNextColumn();
-				RenderItemRow(imgui, info.output, kIconSize, info.outputsPerMinute, true, 0);
+				RenderItemRow(imgui, info.output, iconSize, info.outputsPerMinute, true, 0);
 
 				imgui->EndTable();
 			}
@@ -1060,7 +1073,7 @@ namespace CodexUI
 				return;
 			}
 
-			constexpr float kIconSize = 28.0f;
+			const float iconSize = TwoLineIconSize(imgui);
 			constexpr float kMinColumnWidth = 240.0f;
 
 			float availW = 0.0f, availH = 0.0f;
@@ -1084,7 +1097,7 @@ namespace CodexUI
 				PushIDPtr(imgui, nativeRecipe);
 
 				bool clicked = imgui->SelectableFull("##tier_recipe", recipe.nativeRecipe == g_selectedNativeRecipe,
-					kItemSelectableFlags, 0.0f, TwoLineRowHeight(imgui, kIconSize));
+					kItemSelectableFlags, 0.0f, TwoLineRowHeight(imgui, iconSize));
 				const bool rightClicked = imgui->IsItemClicked(1);
 				if (imgui->IsItemHovered())
 					imgui->SetTooltip(IsPinned(nativeRecipe)
@@ -1092,7 +1105,7 @@ namespace CodexUI
 						: "Click to view, right-click to pin");
 				imgui->SameLine(0.0f, 0.0f);
 
-				CodexIcons::Draw(imgui, recipe.output.itemImage, kIconSize);
+				CodexIcons::Draw(imgui, recipe.output.itemImage, iconSize);
 
 				imgui->BeginGroup();
 				imgui->Text(recipe.displayName.c_str());
@@ -1101,7 +1114,7 @@ namespace CodexUI
 					snprintf(sub, sizeof(sub), "%.1f/min", recipe.outputsPerMinute);
 				else
 					snprintf(sub, sizeof(sub), "x%d", recipe.output.count);
-				imgui->SetCursorPosY(imgui->GetCursorPosY() - 4.0f);
+				imgui->SetCursorPosY(imgui->GetCursorPosY() - CodexRowSize::kSubLinePullUp);
 				imgui->TextDisabled(sub);
 				imgui->EndGroup();
 
@@ -2590,10 +2603,7 @@ namespace CodexUI
 			if (g_self && g_self->hooks->UI && last.widget)
 				g_self->hooks->UI->SetWidgetVisible(last.widget, false);
 			if (count == 1)
-			{
-				CodexTooltipPin::WatchPinMenus(false);
 				SetPinLayerArrowShown(false);
-			}
 			if (persist)
 				CommitPinnedRecipes();
 		}
@@ -2850,8 +2860,9 @@ namespace CodexUI
 
 		// Pinned cards show their edit controls (the unpin X, Open and Planner)
 		// while the Codex is open, a game screen has the mouse cursor up (the
-		// Escape menu, a machine menu, the recipe station, the inventory), or a
-		// loader or plugin window holds the cursor (the mod loader menu).
+		// Escape menu, a machine menu, the recipe station, the inventory, the
+		// build menu), or a loader or plugin window holds the cursor (the mod
+		// loader menu). The arrow over the pins shows on the same game screens.
 		bool PinsEditable(IModLoaderImGui* imgui)
 		{
 			if (CodexUIActive(imgui))
@@ -2859,7 +2870,7 @@ namespace CodexUI
 			IPluginHooks* hooks = GetHooks();
 			if (!hooks)
 				return false;
-			return (CodexTooltipPin::UIState() & CodexTooltipPin::kUIStateMask) != 0
+			return CodexTooltipPin::PinLayerMenuUp(CodexTooltipPin::UIState())
 				|| (hooks->UI && hooks->UI->IsOverlayOpen());
 		}
 
@@ -2879,9 +2890,6 @@ namespace CodexUI
 		// brings the arrow back when a menu opens.
 		void UpdatePinLayer()
 		{
-			// The loader reads the menu bits only while a pin is up.
-			CodexTooltipPin::WatchPinMenus(PinCount() > 0);
-
 			// Saved tucked: once the restored pins have settled they go in at once.
 			if (g_tuckRestore && g_layerWidget && PinCount() > 0)
 			{

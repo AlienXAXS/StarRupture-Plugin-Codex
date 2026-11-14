@@ -7,7 +7,8 @@
 // Grouped (the default): the first pin is the lead and the only one the
 // player drags (or any pin, which carries the lead); the rest tile or cascade under it. Ungrouped: every pin has
 // its own spot, and a new pin is placed by PlaceNew. Every window stays fully
-// on screen.
+// on screen. The icon size beside two lines of text (CodexRowSize) is in here too,
+// for the same reason: it is arithmetic only, so the tests can reach it.
 
 #include <algorithm>
 #include <cmath>
@@ -504,15 +505,16 @@ namespace CodexPinLayout
 		bool pinsTucked = false;
 	};
 
-	// Whether the screen counts as a menu for the arrow: the Escape menu, or a
-	// game menu with the game cursor up. The loader gives ImGui the mouse on
-	// exactly those screens (its PAUSE_MENU and CURSOR_UP bits), so the arrow
-	// shows only where it can be clicked. That holds for the build menu too: the
-	// loader reports the cursor up there while it sees the menu active, and
-	// without that the arrow could not be clicked, so it stays hidden.
-	inline bool PinLayerMenuUp(bool pauseMenu, bool gameMenu, bool cursorUp)
+	// Whether the screen counts as a menu for the arrow: the Escape menu, or any
+	// screen with the game cursor up. These are the loader's PAUSE_MENU and
+	// CURSOR_UP bits, which are also where the loader gives ImGui the mouse, so the
+	// arrow shows only where it can be clicked. The build menu is one of those
+	// screens: the loader reports no menu bit for it, only the cursor up, and the
+	// cursor clears while a building is being placed. The pinned cards' controls
+	// follow the same two bits, so the cards and the arrow always agree.
+	inline bool PinLayerMenuUp(bool pauseMenu, bool cursorUp)
 	{
-		return pauseMenu || (gameMenu && cursorUp);
+		return pauseMenu || cursorUp;
 	}
 
 	inline PinLayerState PinLayerNow(int pinCount, bool tuckSet, bool menuUp, bool arrowAvailable)
@@ -594,5 +596,38 @@ namespace CodexPinLayout
 		if (bottomY + arrowH <= screenH)
 			return { { (std::min)(at[bottom].x + sizes[bottom].w, screenW), bottomY }, 0.0f };
 		return { { topX, arrowH }, 1.0f };
+	}
+}
+
+// The size of an item icon that stands beside two lines of text (a name and a
+// sub-line), from the current font and style at draw time.
+//
+// The image library keeps a sharp copy per picture and size, at most three sizes
+// per picture and 256 copies shared by all plugins, and a size that keeps
+// changing never gets its copy and stays soft. So Codex draws a picture at no
+// more than two sizes: this one for every two-line row (the recipe detail rows
+// and the tier grid), PluginImages::kMinSize for every one-line row. The size is
+// a whole number of pixels worked out from the font alone, so it only changes
+// when the font does.
+namespace CodexRowSize
+{
+	// How far the sub-line is pulled up under the name, in pixels: the default item
+	// spacing leaves it too low.
+	constexpr float kSubLinePullUp = 4.0f;
+
+	// The largest size the library makes a copy at.
+	constexpr float kMaxIconSize = 256.0f;
+
+	// The height of the name line and the sub-line together.
+	inline float TwoLineTextHeight(float lineHeight, float lineHeightWithSpacing)
+	{
+		return lineHeightWithSpacing + lineHeight - kSubLinePullUp;
+	}
+
+	// An icon as tall as those two lines, in whole pixels, never under minSize
+	// (PluginImages::kMinSize) and never over kMaxIconSize.
+	inline float TwoLineIconSize(float lineHeight, float lineHeightWithSpacing, float minSize)
+	{
+		return std::clamp(std::round(TwoLineTextHeight(lineHeight, lineHeightWithSpacing)), minSize, kMaxIconSize);
 	}
 }

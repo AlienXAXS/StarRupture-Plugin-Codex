@@ -10,4 +10,6 @@
 - Planner button opens the item in the StarRupture Planner
 - Item icons load the first time they are shown, and Codex no longer holds the loading screen to copy them
 - Item icons now come from the ModLoader's image library, so Codex no longer loads or keeps icons of its own
+- Item pictures are now as tall as the two lines of text beside them
+- The pin tuck arrow now also works in the build menu
 - Needs ModLoader 1.24.0 or newer

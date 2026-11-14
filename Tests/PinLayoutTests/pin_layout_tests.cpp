@@ -1178,27 +1178,48 @@ int main()
 			Check(!expanded.pinsTucked, "expanded pins show outside a menu", "expanded");
 		}
 
-		// Which screens count as a menu for the arrow. The build menu comes with the
-		// loader's any-menu bit; the arrow shows there only with the cursor up, the
-		// state the loader gives ImGui the mouse in.
+		// Which screens count as a menu for the arrow: the Escape menu, or any screen
+		// with the game cursor up. The loader reports no menu bit for the build menu,
+		// only the cursor up (any menu 0, build menu 0), and the cursor clears while a
+		// building is being placed.
 		{
 			for (int pause = 0; pause <= 1; ++pause)
-				for (int menu = 0; menu <= 1; ++menu)
-					for (int cursor = 0; cursor <= 1; ++cursor)
-						Check(PinLayerMenuUp(pause != 0, menu != 0, cursor != 0) == ((pause || menu) && (pause || cursor)),
-							"the arrow's menus: the Escape menu, or a game menu with the cursor up",
-							"pause " + std::to_string(pause) + ", menu " + std::to_string(menu) + ", cursor " + std::to_string(cursor));
+				for (int cursor = 0; cursor <= 1; ++cursor)
+					Check(PinLayerMenuUp(pause != 0, cursor != 0) == (pause || cursor),
+						"the arrow's menus: the Escape menu, or a screen with the cursor up",
+						"pause " + std::to_string(pause) + ", cursor " + std::to_string(cursor));
 
-			const PinLayerState buildCursor = PinLayerNow(3, false, PinLayerMenuUp(false, true, true), true);
-			Check(buildCursor.arrowShown, "the build menu with the cursor up shows the arrow", "build menu, cursor");
-			const PinLayerState buildNoCursor = PinLayerNow(3, false, PinLayerMenuUp(false, true, false), true);
-			Check(!buildNoCursor.arrowShown, "the build menu without the cursor shows no arrow, which could not be clicked", "build menu, no cursor");
-			const PinLayerState buildTucked = PinLayerNow(3, true, PinLayerMenuUp(false, true, false), true);
-			Check(!buildTucked.arrowShown && buildTucked.pinsTucked, "tucked pins stay tucked in the build menu without the cursor", "build menu, tucked");
-			const PinLayerState buildNoPins = PinLayerNow(0, false, PinLayerMenuUp(false, true, true), true);
+			const PinLayerState buildCursor = PinLayerNow(3, false, PinLayerMenuUp(false, true), true);
+			Check(buildCursor.arrowShown, "the build menu (cursor up, no menu bit) shows the arrow", "build menu, cursor");
+			const PinLayerState buildNoCursor = PinLayerNow(3, false, PinLayerMenuUp(false, false), true);
+			Check(!buildNoCursor.arrowShown, "placing a building (cursor clear) shows no arrow", "build menu, no cursor");
+			const PinLayerState buildTucked = PinLayerNow(3, true, PinLayerMenuUp(false, false), true);
+			Check(!buildTucked.arrowShown && buildTucked.pinsTucked, "tucked pins stay tucked while placing a building", "build menu, tucked");
+			const PinLayerState buildNoPins = PinLayerNow(0, false, PinLayerMenuUp(false, true), true);
 			Check(!buildNoPins.arrowShown, "the build menu with no pins shows no arrow", "build menu, no pins");
-			const PinLayerState gameplay = PinLayerNow(3, false, PinLayerMenuUp(false, false, false), true);
+			const PinLayerState escape = PinLayerNow(3, false, PinLayerMenuUp(true, false), true);
+			Check(escape.arrowShown, "the Escape menu shows the arrow", "escape menu");
+			const PinLayerState gameplay = PinLayerNow(3, false, PinLayerMenuUp(false, false), true);
 			Check(!gameplay.arrowShown, "plain gameplay shows no arrow", "gameplay");
+		}
+
+		// The icon beside two lines of text: as tall as the lines, never under the
+		// library's minimum. 15 px font, item spacing 6 is the loader's default theme.
+		{
+			constexpr float kMin = 28.0f;
+			Check(CodexRowSize::TwoLineTextHeight(15.0f, 21.0f) == 32.0f, "two lines at the default theme are 32 px", "text 15");
+			Check(CodexRowSize::TwoLineIconSize(15.0f, 21.0f, kMin) == 32.0f, "the icon at the default theme is 32 px", "icon 15");
+			Check(CodexRowSize::TwoLineIconSize(13.0f, 17.0f, kMin) == kMin, "two short lines do not take the icon under the minimum", "icon 13");
+			Check(CodexRowSize::TwoLineIconSize(30.0f, 36.0f, kMin) == 62.0f, "the icon grows with the font", "icon 30");
+			Check(CodexRowSize::TwoLineIconSize(15.4f, 21.4f, kMin) == 33.0f && CodexRowSize::TwoLineIconSize(15.6f, 21.6f, kMin) == 33.0f,
+				"the icon is a whole number of pixels", "icon rounding");
+			Check(CodexRowSize::TwoLineIconSize(200.0f, 206.0f, kMin) == 256.0f, "the icon is held at the library's largest size", "icon clamp");
+			for (float font = 8.0f; font <= 48.0f; font += 0.5f)
+			{
+				const float icon = CodexRowSize::TwoLineIconSize(font, font + 6.0f, kMin);
+				Check(icon >= kMin && icon <= 256.0f && icon >= CodexRowSize::TwoLineTextHeight(font, font + 6.0f) - 0.5f,
+					"the icon is at least the minimum and as tall as the two lines", "font " + std::to_string(font));
+			}
 		}
 
 		// The saved tuck's text: what is written reads back, and anything else is not tucked.
