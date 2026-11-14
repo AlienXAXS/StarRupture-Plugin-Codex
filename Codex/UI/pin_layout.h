@@ -511,7 +511,8 @@ namespace CodexPinLayout
 	// arrow shows only where it can be clicked. The build menu is one of those
 	// screens: the loader reports no menu bit for it, only the cursor up, and the
 	// cursor clears while a building is being placed. The pinned cards' controls
-	// follow the same two bits, so the cards and the arrow always agree.
+	// follow these same two bits (they also show while the Codex or a loader window
+	// is open, which the arrow does not).
 	inline bool PinLayerMenuUp(bool pauseMenu, bool cursorUp)
 	{
 		return pauseMenu || cursorUp;
@@ -615,7 +616,7 @@ namespace CodexRowSize
 	// spacing leaves it too low.
 	constexpr float kSubLinePullUp = 4.0f;
 
-	// The largest size the library makes a copy at.
+	// The size of the picture the library stores: a size from here up is not copied.
 	constexpr float kMaxIconSize = 256.0f;
 
 	// The height of the name line and the sub-line together.

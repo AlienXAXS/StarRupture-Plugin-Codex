@@ -2921,7 +2921,7 @@ namespace CodexUI
 				return;
 			}
 
-			constexpr float kIconSize = PluginImages::kMinSize;
+			constexpr float kIconSize = kRecipeLabelIconSize;
 
 			char line[256];
 			snprintf(line, sizeof(line), "%s  -  %.1fs", info.buildingName.c_str(), info.buildTimeSeconds);

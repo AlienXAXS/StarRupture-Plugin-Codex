@@ -22,7 +22,7 @@ namespace CodexTooltipPin
 	// True while the Escape menu is up or a game screen has the game cursor up
 	// (a machine menu, the recipe station, the inventory, the build menu), so the
 	// pin layer arrow never shows in plain gameplay. The pinned cards' controls
-	// follow the same bits (CodexPinLayout::PinLayerMenuUp).
+	// use the same function for these screens (CodexPinLayout::PinLayerMenuUp).
 	inline bool PinLayerMenuUp(uint64_t state)
 	{
 		return CodexPinLayout::PinLayerMenuUp((state & PLUGIN_UI_PAUSE_MENU) != 0, (state & PLUGIN_UI_CURSOR_UP) != 0);
