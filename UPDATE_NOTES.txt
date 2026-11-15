@@ -11,5 +11,5 @@
 - Item icons load the first time they are shown, and Codex no longer holds the loading screen to copy them
 - Item icons now come from the ModLoader's image library, so Codex no longer loads or keeps icons of its own
 - Item pictures in the recipe lists are bigger, about 40 px, and all item pictures grow with the mod loader's font setting
-- The pin tuck arrow now also works in the build menu
+- The pin tuck arrow now shows in the build menu, whenever the mouse cursor is showing
 - Needs ModLoader 1.24.0 or newer
