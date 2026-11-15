@@ -92,8 +92,8 @@ namespace CodexRecipes
 
 		// Set when a game struct or function does not have the layout this code
 		// reads: a call whose parameter block is not the one expected, or a map
-		// the walk rejects. The refresh then builds an empty database instead of
-		// guessing. Game thread only; cleared at the start of each refresh.
+		// the walk rejects. The refresh then stops and leaves the codex off,
+		// the same as the feature being off, instead of guessing. Game thread only; cleared at the start of each refresh.
 		bool g_layoutRejected = false;
 		bool g_layoutLogged   = false;
 
@@ -207,6 +207,8 @@ namespace CodexRecipes
 					auto* linkedMap = CodexFields::LinkedCollections.In(subsystem);
 					if (!linkedMap)
 						continue;
+					// Pointer and TArray size and alignment are compiled in; that is safe
+					// because ScriptMapView::Validate rejects a wrong stride.
 					// The key is a pointer. The value is a struct of one TArray, so it
 					// aligns as a TArray does; a build that gave it a wider member
 					// fails the walk's checks instead of being read at a guessed stride.
@@ -645,7 +647,7 @@ namespace CodexRecipes
 			// The returned array's elements are FAuSimpleItem at the live size, so
 			// they are stepped by it (the array is typed as bytes) and read in place.
 			PluginMap::ParamsBlock needed = CallRecipeFunction(recipe, "GetNeededResources",
-				CodexFields::NeededResourcesParamsSize, CodexFields::NeededResourcesReturn, sizeof(SDK::TArray<uint8_t>));
+				CodexFields::NeededResourcesParamsSize, CodexFields::NeededResourcesReturn, sizeof(SDK::TArray<uint8_t>)); // compiled-in TArray size; CallRecipeFunction rejects any other return size
 			const auto* resources = reinterpret_cast<const SDK::TArray<uint8_t>*>(needed.Param("ReturnValue"));
 			if (!resources)
 			{
@@ -834,11 +836,15 @@ namespace CodexRecipes
 
 				for (auto& [groupName, tiers] : grouped)
 				{
+					if (g_layoutRejected)
+						break;
 					BuildingGroup group;
 					group.displayName = groupName;
 
 					for (auto& [tier, tierRecipes] : tiers)
 					{
+						if (g_layoutRejected)
+							break;
 						BuildingTier bt;
 						bt.tier  = tier;
 						bt.label = tiers.size() > 1
@@ -847,6 +853,8 @@ namespace CodexRecipes
 
 						for (SDK::UCrItemRecipeData* recipe : tierRecipes)
 						{
+							if (g_layoutRejected)
+								break;
 							if (rejected.count(recipe))
 								continue;
 
@@ -907,6 +915,20 @@ namespace CodexRecipes
 			catch (...)
 			{
 				LOG_DEBUG("CodexRecipes: exception while resolving recipes.");
+			}
+
+			// A rejected layout ends the refresh in the same state as the feature
+			// being off: no database, and the windows stay unavailable.
+			if (g_layoutRejected)
+			{
+				{
+					std::lock_guard<std::mutex> lock(g_mutex);
+					g_recipes.clear();
+					g_buildingGroups.clear();
+					g_ready = false;
+				}
+				g_refreshInFlight.store(false, std::memory_order_release);
+				return;
 			}
 
 			std::sort(recipes.begin(), recipes.end(),
