@@ -1224,41 +1224,8 @@ int main()
 			Check(!noPins.arrowShown, "with no pins there is no arrow", "no pins");
 		}
 
-		// The icon beside two lines of text: 1.25 times the lines, never under the
-		// library's minimum. 15 px font, item spacing 6 is the loader's default theme.
-		{
-			constexpr float kMin = 28.0f;
-			Check(CodexRowSize::TwoLineTextHeight(15.0f, 21.0f) == 32.0f, "two lines at the default theme are 32 px", "text 15");
-			Check(CodexRowSize::TwoLineIconSize(15.0f, 21.0f, kMin) == 40.0f, "the icon at the default theme is 40 px", "icon 15");
-			Check(CodexRowSize::TwoLineIconSize(10.0f, 14.0f, kMin) == kMin, "two short lines do not take the icon under the minimum", "icon 10");
-			Check(CodexRowSize::TwoLineIconSize(30.0f, 36.0f, kMin) == 78.0f, "the icon grows with the font", "icon 30");
-			Check(CodexRowSize::TwoLineIconSize(15.1f, 21.1f, kMin) == 40.0f && CodexRowSize::TwoLineIconSize(15.3f, 21.3f, kMin) == 41.0f,
-				"the icon is a whole number of pixels", "icon rounding");
-			Check(CodexRowSize::TwoLineIconSize(200.0f, 206.0f, kMin) == 256.0f, "the icon is held at the library's largest size", "icon clamp");
-			for (float font = 8.0f; font <= 48.0f; font += 0.5f)
-			{
-				const float icon = CodexRowSize::TwoLineIconSize(font, font + 6.0f, kMin);
-				Check(icon >= kMin && icon <= 256.0f && icon == std::round(icon) &&
-						icon >= CodexRowSize::TwoLineTextHeight(font, font + 6.0f) * CodexRowSize::kIconOverText - 0.5f,
-					"the icon is a whole number of pixels, at least the minimum and taller than the two lines", "font " + std::to_string(font));
-			}
-		}
-
-		// The icon beside one line of text: 28 px at the default 15 px font, growing
-		// with it, never under the library's minimum.
-		{
-			constexpr float kMin = 28.0f;
-			Check(CodexRowSize::OneLineIconSize(15.0f, kMin) == 28.0f, "the one-line icon at the default font is 28 px", "one-line 15");
-			Check(CodexRowSize::OneLineIconSize(18.0f, kMin) == 34.0f, "the one-line icon at an 18 px font is 34 px", "one-line 18");
-			Check(CodexRowSize::OneLineIconSize(10.0f, kMin) == kMin, "a small font does not take the one-line icon under the minimum", "one-line 10");
-			Check(CodexRowSize::OneLineIconSize(500.0f, kMin) == 256.0f, "the one-line icon is held at the library's largest size", "one-line clamp");
-			for (float font = 8.0f; font <= 48.0f; font += 0.5f)
-			{
-				const float icon = CodexRowSize::OneLineIconSize(font, kMin);
-				Check(icon >= kMin && icon <= 256.0f && icon == std::round(icon),
-					"the one-line icon is a whole number of pixels, within the minimum and the maximum", "font " + std::to_string(font));
-			}
-		}
+		// The height of two text lines: 32 px at the loader's default theme (15 px font, item spacing 6).
+		Check(CodexRowSize::TwoLineTextHeight(15.0f, 21.0f) == 32.0f, "two lines at the default theme are 32 px", "text 15");
 
 		// The saved tuck's text: what is written reads back, and anything else is not tucked.
 		Check(PinsTuckedFromText(PinsTuckedText(true)), "a saved tuck reads back tucked", "text on");

@@ -7,7 +7,7 @@
 // Grouped (the default): the first pin is the lead and the only one the
 // player drags (or any pin, which carries the lead); the rest tile or cascade under it. Ungrouped: every pin has
 // its own spot, and a new pin is placed by PlaceNew. Every window stays fully
-// on screen. The icon size beside two lines of text (CodexRowSize) is in here too,
+// on screen. The height of two text lines in a row (CodexRowSize) is in here too,
 // for the same reason: it is arithmetic only, so the tests can reach it.
 
 #include <algorithm>
@@ -609,51 +609,17 @@ namespace CodexPinLayout
 	}
 }
 
-// The size of an item icon that stands beside two lines of text (a name and a
-// sub-line), from the current font and style at draw time: a little taller than
-// the two lines.
-//
-// The image library keeps a sharp copy per picture and size, at most three sizes
-// per picture and 256 copies shared by all plugins, and a size that keeps
-// changing never gets its copy and stays soft. So Codex draws a picture at no
-// more than two sizes: this one for every two-line row (the recipe detail rows
-// and the tier grid), OneLineIconSize for every one-line row. Both are whole
-// numbers of pixels worked out from the font alone, so they only change when the
-// font does.
+// The height of two text lines (a name and a sub-line) in a row, from the current
+// font and style at draw time. It is arithmetic only, so the tests can reach it.
 namespace CodexRowSize
 {
 	// How far the sub-line is pulled up under the name, in pixels: the default item
 	// spacing leaves it too low.
 	constexpr float kSubLinePullUp = 4.0f;
 
-	// The size of the picture the library stores: a size from here up is not copied.
-	constexpr float kMaxIconSize = 256.0f;
-
-	// The icon over the two text lines: about 40 px beside 32 px of text at the default font.
-	constexpr float kIconOverText = 1.25f;
-
-	// Sizes are given at the default 15 px font and scale with it.
-	constexpr float kDefaultFontPx = 15.0f;
-	constexpr float kOneLineIconAtDefault = 28.0f;
-
 	// The height of the name line and the sub-line together.
 	inline float TwoLineTextHeight(float lineHeight, float lineHeightWithSpacing)
 	{
 		return lineHeightWithSpacing + lineHeight - kSubLinePullUp;
-	}
-
-	// The icon: kIconOverText times the height of those two lines, in whole pixels,
-	// never under minSize (PluginImages::kMinSize) and never over kMaxIconSize.
-	inline float TwoLineIconSize(float lineHeight, float lineHeightWithSpacing, float minSize)
-	{
-		return std::clamp(std::round(TwoLineTextHeight(lineHeight, lineHeightWithSpacing) * kIconOverText), minSize, kMaxIconSize);
-	}
-
-	// The icon beside one line of text: kOneLineIconAtDefault at the default font,
-	// growing with the font, in whole pixels, never under minSize
-	// (PluginImages::kMinSize) and never over kMaxIconSize.
-	inline float OneLineIconSize(float lineHeight, float minSize)
-	{
-		return std::clamp(std::round(kOneLineIconAtDefault * lineHeight / kDefaultFontPx), minSize, kMaxIconSize);
 	}
 }

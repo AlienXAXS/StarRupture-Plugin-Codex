@@ -423,12 +423,14 @@ namespace CodexUI
 			ShowDetailPanel();
 		}
 
-		// The icon beside a name + sub-line: a little taller than the two lines of
-		// text, from the current font and style (never under PluginImages::kMinSize).
+		// The icon beside a name + sub-line, at the default font: it grows with the
+		// loader's font (PluginImages::SizeForFont).
+		constexpr float kTwoLineIconAtDefault = 40.0f;
+		constexpr float kOneLineIconAtDefault = 28.0f;
+
 		float TwoLineIconSize(IModLoaderImGui* imgui)
 		{
-			return CodexRowSize::TwoLineIconSize(
-				imgui->GetTextLineHeight(), imgui->GetTextLineHeightWithSpacing(), PluginImages::kMinSize);
+			return PluginImages::SizeForFont(imgui, kTwoLineIconAtDefault);
 		}
 
 		// Height of a row showing an icon beside a name + sub-line (the
@@ -443,10 +445,10 @@ namespace CodexUI
 		}
 
 		// The icon beside one line of text (search results, the consumers popup, the
-		// pinned windows): never under PluginImages::kMinSize, growing with the font.
+		// pinned windows): grows with the font like TwoLineIconSize.
 		float OneLineIconSize(IModLoaderImGui* imgui)
 		{
-			return CodexRowSize::OneLineIconSize(imgui->GetTextLineHeight(), PluginImages::kMinSize);
+			return PluginImages::SizeForFont(imgui, kOneLineIconAtDefault);
 		}
 
 		// The height of a one-line row: the icon, or the text line when the font is
