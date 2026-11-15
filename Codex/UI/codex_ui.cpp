@@ -2934,7 +2934,6 @@ namespace CodexUI
 
 			const float iconSize = OneLineIconSize(imgui);
 
-
 			char line[256];
 			snprintf(line, sizeof(line), "%s  -  %.1fs", info.buildingName.c_str(), info.buildTimeSeconds);
 			imgui->TextDisabled(line);

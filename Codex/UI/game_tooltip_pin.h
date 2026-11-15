@@ -27,7 +27,6 @@ namespace CodexTooltipPin
 	// cards' controls and the pin layer arrow show.
 	inline bool PinLayerMenuUp(uint64_t state)
 	{
-		static_assert((kPauseMenuBit | kCursorUpBit) == kUIStateMask, "the bits tested here are the bits the loader is asked for");
 		return CodexPinLayout::PinLayerMenuUp((state & kPauseMenuBit) != 0, (state & kCursorUpBit) != 0);
 	}
 

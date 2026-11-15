@@ -48,8 +48,8 @@ what it produces.
   drawn from the ModLoader's shared image library, which reads each one the first time it is
   shown and keeps a small copy for the session. Codex no longer loads or holds icons of its own,
   and does not hold the loading screen for them. A row whose icon is still loading keeps its
-  place, so nothing moves when the icon appears. Item pictures in the recipe lists are bigger,
-  about 40 px, and all item pictures grow with the mod loader's font setting.
+  place, so nothing moves when the icon appears. Item pictures in a recipe's details and in a building's
+  recipe grid are bigger, about 40 px, and all item pictures grow with the mod loader's font setting.
 
 ---
 
