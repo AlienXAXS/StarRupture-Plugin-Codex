@@ -170,11 +170,27 @@ keep working, and choices match ignoring case. The dropdowns and the hidden entr
 
 ## Building
 
-1. Clone this repo (with submodules, or set `GameSDKRoot` / `PluginSDKInclude` in `Shared.props`)
-2. Open `StarRupture-Plugin-Codex.sln` in Visual Studio 2022
-3. Build the `Client Release` configuration (x64)
-4. The output DLL is written to `build\Client Release\Plugins\Codex.dll`
-5. Drop it into `Binaries\Win64\Plugins\` alongside `dwmapi.dll` and launch the game
+Put the plugin next to `StarRupture-Plugin-SDK` and clone both with `--recursive`, so the game SDK submodules come along:
+
+```
+git clone --recursive https://github.com/AlienXAXS/StarRupture-Plugin-SDK.git
+git clone --recursive https://github.com/AlienXAXS/StarRupture-Plugin-Codex.git
+```
+
+```
+<parent folder>/
+├── StarRupture-Plugin-SDK/
+└── StarRupture-Plugin-Codex/
+```
+
+The game SDK comes from this plugin's own `StarRupture SDK` submodule when it has one, otherwise from the Plugin SDK's. To build against other folders, pass `/p:PluginSDKInclude=...` and `/p:GameSDKRoot=...` to msbuild.
+
+Then:
+
+1. Open `StarRupture-Plugin-Codex.sln` in Visual Studio 2022
+2. Build the `Client Release` configuration (x64)
+3. The output DLL is written to `build\Client Release\Plugins\Codex.dll`
+4. Drop it into `Binaries\Win64\Plugins\` alongside `dwmapi.dll` and launch the game
 
 See [PluginDevelopment.md](PluginDevelopment.md) for the full plugin API reference.
 
