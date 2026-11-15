@@ -5,6 +5,7 @@
 #include "Chimera_structs.hpp"
 #include "AuCrafting_classes.hpp"
 #include "AuCrafting_structs.hpp"
+#include "AuCrafting_parameters.hpp"
 #include "AuItems_classes.hpp"
 #include "AuItems_structs.hpp"
 #include "AuActorPlacement_classes.hpp"
@@ -18,27 +19,39 @@
 // Every member of a game class Codex reads, taken from the loader's map for the
 // running game build (see plugin_map.h). Resolved once in OnPluginLoadHooks;
 // read on the game thread with In(object), which is null when the object is
-// null. Structs Codex only reads through those members are covered by a size
-// check instead of a field per member.
+// null. The two structs Codex steps through (an item stack, and the entries of
+// the linked-collections map) are taken at the size the running game reflects
+// (SR_SIZE): nothing is compiled in for them, so a build that resizes one does
+// not turn the codex off.
+//
+// The structs Codex holds as single members of a game class, and reads only
+// through their own member rows, are requested at any size
+// (CODEX_FIELD_ANY_SIZE): nothing reads their size, so a build that resizes one
+// does not turn the codex off.
 
 #define CODEX_FIELD(Class, Member) SR_FIELD(decltype(SDK::Class::Member), Class, Member, 0)
+
+// SR_FIELD without the size check: the same typed In(object), but the member
+// may be any size the game reflects (see SR_FIELD_ANY_SIZE).
+#define CODEX_FIELD_ANY_SIZE(Class, Member) \
+	PluginField<decltype(SDK::Class::Member)>{ SR_FIELD_ANY_SIZE(Class, Member, 0) }
 
 namespace CodexFields
 {
 	inline auto UIItemType        = CODEX_FIELD(UAuItemDataBase, UIItemType);
 	inline auto UniqueItemName    = CODEX_FIELD(UAuItemDataBase, UniqueItemName);
 	inline auto ItemName          = CODEX_FIELD(UAuItemDataBase, ItemName);
-	inline auto EntityType        = CODEX_FIELD(UAuActorPlacementData, EntityType);
+	inline auto EntityType        = CODEX_FIELD_ANY_SIZE(UAuActorPlacementData, EntityType);
 	inline auto BuildingType      = CODEX_FIELD(UCrBuildingData, Type);
 	inline auto BuildingName      = CODEX_FIELD(UCrBuildingData, BuildingName);
 	inline auto LinkedCollections = CODEX_FIELD(UCrItemRecipeCollectionSubsystem, LinkedCollections);
 	inline auto Recipes           = CODEX_FIELD(UCrItemRecipeCollection, Recipes);
 	inline auto RecipeBuildTime   = CODEX_FIELD(UAuItemRecipeData, BuildTime);
 	inline auto RecipeDisplayText = CODEX_FIELD(UCrItemRecipeData, DisplayText);
-	inline auto CraftingParameters = CODEX_FIELD(UCrBuildingCraftingTrait, CraftingParameters);
+	inline auto CraftingParameters = CODEX_FIELD_ANY_SIZE(UCrBuildingCraftingTrait, CraftingParameters);
 	inline auto CrafterToRecipeMap = CODEX_FIELD(ACrCraftingRecipeOwner, CrafterToRecipeMap);
 
-	// Members of the structs the codex steps through
+	// Members of the structs the codex reads
 	inline auto ItemCount          = CODEX_FIELD(FAuSimpleItem, Count);
 	inline auto ItemData           = CODEX_FIELD(FAuSimpleItem, ItemDataBase);
 	inline auto LinkedList         = CODEX_FIELD(FNestedItemRecipeCollectionArray, Collections);
@@ -46,10 +59,15 @@ namespace CodexFields
 	inline auto EntityConfigRef    = CODEX_FIELD(FAuAPMassSpawnedEntityType, EntityConfig);
 	inline auto RecipeCollection   = CODEX_FIELD(FCrCraftingParameters, RecipeCollection);
 
-	inline auto SimpleItemSize        = SR_SIZE_CHECK(FAuSimpleItem);
-	inline auto EntityTypeSize        = SR_SIZE_CHECK(FAuAPMassSpawnedEntityType);
-	inline auto CraftingParametersSize = SR_SIZE_CHECK(FCrCraftingParameters);
-	inline auto NestedCollectionsSize = SR_SIZE_CHECK(FNestedItemRecipeCollectionArray);
+	inline auto SimpleItemSize        = SR_SIZE(FAuSimpleItem);
+	inline auto NestedCollectionsSize = SR_SIZE(FNestedItemRecipeCollectionArray);
+
+	// The recipe functions' parameter blocks: each one's size and where the game
+	// puts its return value (see PluginMap::ParamsBlockOf).
+	inline auto OutputItemParamsSize      = SR_PARAMS_SIZE(AuItemRecipeData, GetOutputItem);
+	inline auto OutputItemReturn          = SR_PARAM(AuItemRecipeData, GetOutputItem, ReturnValue);
+	inline auto NeededResourcesParamsSize = SR_PARAMS_SIZE(AuItemRecipeData, GetNeededResources);
+	inline auto NeededResourcesReturn     = SR_PARAM(AuItemRecipeData, GetNeededResources, ReturnValue);
 
 	// The game's item tooltip, read when the game-menu pin key is pressed and
 	// when the pin hint is added to it. Found by name on first use (Blueprint
@@ -79,7 +97,8 @@ namespace CodexFields
 		KeysOf(UIItemType, UniqueItemName, ItemName, EntityType, BuildingType, BuildingName,
 			LinkedCollections, Recipes, RecipeBuildTime, RecipeDisplayText, CraftingParameters, CrafterToRecipeMap,
 			ItemCount, ItemData, LinkedList, EntityConfigPtr, EntityConfigRef, RecipeCollection,
-			SimpleItemSize, EntityTypeSize, CraftingParametersSize, NestedCollectionsSize),
+			SimpleItemSize, NestedCollectionsSize,
+			OutputItemParamsSize, OutputItemReturn, NeededResourcesParamsSize, NeededResourcesReturn),
 		{ "Menu.*", "Planner.*" } };
 
 	// Call before Resolve, so a miss lands on the feature and not on the plugin.
@@ -96,18 +115,20 @@ namespace CodexFields
 			UIItemType, UniqueItemName, ItemName, EntityType, BuildingType, BuildingName,
 			LinkedCollections, Recipes, RecipeBuildTime, RecipeDisplayText, CraftingParameters, CrafterToRecipeMap,
 			ItemCount, ItemData, LinkedList, EntityConfigPtr, EntityConfigRef, RecipeCollection,
-			SimpleItemSize, EntityTypeSize, CraftingParametersSize, NestedCollectionsSize);
+			SimpleItemSize, NestedCollectionsSize,
+			OutputItemParamsSize, OutputItemReturn, NeededResourcesParamsSize, NeededResourcesReturn);
 	}
 
-	// A stack's item type and its count, or null / zero when unresolved.
-	inline SDK::UAuItemDataBase* ItemOf(const SDK::FAuSimpleItem& item)
+	// A stack's item type and its count, or null / zero when unresolved. `item`
+	// is the game's FAuSimpleItem, read in place.
+	inline SDK::UAuItemDataBase* ItemOf(const void* item)
 	{
-		return ValueOr<SDK::UAuItemDataBase*>(ItemData, &item);
+		return ValueOr<SDK::UAuItemDataBase*>(ItemData, item);
 	}
 
-	inline int32_t CountOf(const SDK::FAuSimpleItem& item)
+	inline int32_t CountOf(const void* item)
 	{
-		return ValueOr<int32_t>(ItemCount, &item);
+		return ValueOr<int32_t>(ItemCount, item);
 	}
 
 	// An item's unique name and its localized name. Empty when unresolved. A

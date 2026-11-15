@@ -51,6 +51,14 @@ what it produces.
   place, so nothing moves when the icon appears. Item pictures in a recipe's details and in a building's
   recipe grid are bigger, about 40 px, and all item pictures grow with the mod loader's font setting.
 
+- **Reads its game data from the version object map** <sup>[✦](#msantoro12)</sup> -- Codex takes
+  the size of the item and recipe data it reads, and where the recipe functions put their results,
+  from the ModLoader's version object map (the version map from here on), instead of carrying them
+  inside the plugin. A game update that changes them is covered by a version map update, not a new
+  Codex. If the game's recipe data no longer matches what Codex reads, or the version map lacks
+  those entries, the recipe codex stays off and logs one line, and the rest of the mod keeps
+  running. Codex never reads game data at a size it was not given.
+
 ---
 
 ## Features

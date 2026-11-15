@@ -90,7 +90,56 @@ namespace CodexRecipes
 			return type && *type == SDK::EUIItemType::BlueprintItem;
 		}
 
-		RecipeItemRef MakeItemRef(const SDK::FAuSimpleItem& simpleItem)
+		// Set when a game struct or function does not have the layout this code
+		// reads: a call whose parameter block is not the one expected, or a map
+		// the walk rejects. The refresh then builds an empty database instead of
+		// guessing. Game thread only; cleared at the start of each refresh.
+		bool g_layoutRejected = false;
+		bool g_layoutLogged   = false;
+
+		void RejectLayout(const char* what, const char* why)
+		{
+			g_layoutRejected = true;
+			if (g_layoutLogged)
+				return;
+			g_layoutLogged = true;
+			LOG_WARN("CodexRecipes: %s does not match the running game (%s); the recipe codex is off.", what, why);
+		}
+
+		// GetOutputItem and GetNeededResources hand back an FAuSimpleItem (or an
+		// array of them) by value through ProcessEvent. The SDK's wrappers hold
+		// the result in a compiled struct; this calls the function with a
+		// parameter block of the size the running game gives it, and reads the
+		// return value in place at the offset the game gives it
+		// (PluginMap::ParamsBlockOf), so a build that resizes FAuSimpleItem or
+		// adds a parameter does not turn the codex off or misplace the result.
+		// `returnSize` is the size of the return value the codex reads it as.
+		// The block is empty when the function is not as expected or the call did
+		// not happen.
+		PluginMap::ParamsBlock CallRecipeFunction(SDK::UCrItemRecipeData* recipe, const char* name,
+			const PluginFieldSpec& paramsSize, const PluginFieldSpec& returnValue, uint32_t returnSize)
+		{
+			SDK::UFunction* function = recipe->Class ? recipe->Class->GetFunction("AuItemRecipeData", name) : nullptr;
+			PluginMap::ParamsBlock call = PluginMap::ParamsBlockOf(paramsSize, { &returnValue });
+			if (!function || !call || returnValue.resolvedSize != returnSize)
+			{
+				RejectLayout(name, "its return value is not the size the codex reads");
+				return PluginMap::ParamsBlock(0, {});
+			}
+
+			// Marked native for the call and handed back as it was, the way the
+			// SDK's own wrappers call it.
+			const auto flags = function->FunctionFlags;
+			function->FunctionFlags |= 0x400;
+			bool called = false;
+			try { called = PluginMap::Call(recipe, function, call); }
+			catch (...) {}
+			function->FunctionFlags = flags;
+			return called ? std::move(call) : PluginMap::ParamsBlock(0, {});
+		}
+
+		// `simpleItem` is the game's FAuSimpleItem, read in place.
+		RecipeItemRef MakeItemRef(const void* simpleItem)
 		{
 			RecipeItemRef ref;
 			ref.count = CodexFields::CountOf(simpleItem);
@@ -128,6 +177,11 @@ namespace CodexRecipes
 		// (base collection -> collections GameFeatures added to it). There's
 		// one subsystem per world, and stale worlds can linger until GC, so
 		// merge every instance rather than trusting the first.
+		//
+		// The map's values are FNestedItemRecipeCollectionArray at the size the
+		// running game reflects, so it is walked at that stride
+		// (PluginMap::ScriptMapView) and not through the compiled SDK::TMap. A
+		// map the walk rejects sets g_layoutRejected and gives nothing.
 		LinkedCollectionMap CollectLinkedCollections()
 		{
 			LinkedCollectionMap result;
@@ -153,16 +207,27 @@ namespace CodexRecipes
 					auto* linkedMap = CodexFields::LinkedCollections.In(subsystem);
 					if (!linkedMap)
 						continue;
-					for (auto& pair : *linkedMap)
+					// The key is a pointer. The value is a struct of one TArray, so it
+					// aligns as a TArray does; a build that gave it a wider member
+					// fails the walk's checks instead of being read at a guessed stride.
+					const PluginMap::ScriptMapView map(linkedMap, PluginMap::MapLayout(
+						sizeof(void*), alignof(void*),
+						CodexFields::NestedCollectionsSize.resolvedSize, alignof(SDK::TArray<uint8_t>)));
+					if (!map)
 					{
-						SDK::UCrItemRecipeCollection* base = pair.Key();
+						RejectLayout("LinkedCollections", map.ReasonText());
+						return LinkedCollectionMap();
+					}
+					map.ForEach([&](uint8_t* key, uint8_t* value)
+					{
+						SDK::UCrItemRecipeCollection* base = *reinterpret_cast<SDK::UCrItemRecipeCollection**>(key);
 						if (!base)
-							continue;
+							return;
 
 						CollectionList& linked = result[base];
-						const auto* extras = CodexFields::LinkedList.In(&pair.Value());
+						const auto* extras = CodexFields::LinkedList.In(value);
 						if (!extras)
-							continue;
+							return;
 						for (SDK::UCrItemRecipeCollection* extra : *extras)
 						{
 							if (extra && std::find(linked.begin(), linked.end(), extra) == linked.end())
@@ -172,7 +237,7 @@ namespace CodexRecipes
 									base->GetName().c_str(), extra->GetName().c_str(), i);
 							}
 						}
-					}
+					});
 				}
 				catch (...)
 				{
@@ -549,11 +614,12 @@ namespace CodexRecipes
 			info.key              = recipeName;
 			info.buildTimeSeconds = CodexFields::ValueOr<float>(CodexFields::RecipeBuildTime, recipe);
 
-			SDK::FAuSimpleItem outputItem;
-			try { outputItem = recipe->GetOutputItem(); }
-			catch (...)
+			PluginMap::ParamsBlock output = CallRecipeFunction(recipe, "GetOutputItem",
+				CodexFields::OutputItemParamsSize, CodexFields::OutputItemReturn, CodexFields::SimpleItemSize.resolvedSize);
+			const uint8_t* outputItem = output.Param("ReturnValue");
+			if (!outputItem)
 			{
-				outReason = "exception calling GetOutputItem()";
+				outReason = "GetOutputItem() gave no item";
 				return false;
 			}
 
@@ -576,10 +642,24 @@ namespace CodexRecipes
 				return false;
 			}
 
+			// The returned array's elements are FAuSimpleItem at the live size, so
+			// they are stepped by it (the array is typed as bytes) and read in place.
+			PluginMap::ParamsBlock needed = CallRecipeFunction(recipe, "GetNeededResources",
+				CodexFields::NeededResourcesParamsSize, CodexFields::NeededResourcesReturn, sizeof(SDK::TArray<uint8_t>));
+			const auto* resources = reinterpret_cast<const SDK::TArray<uint8_t>*>(needed.Param("ReturnValue"));
+			if (!resources)
+			{
+				outReason = "GetNeededResources() gave no list";
+				return false;
+			}
+
 			try
 			{
-				for (const SDK::FAuSimpleItem& resource : recipe->GetNeededResources())
+				for (int32_t n = 0; n < resources->Num(); ++n)
 				{
+					const uint8_t* resource = PluginMap::ElementAt(*resources, n, CodexFields::SimpleItemSize);
+					if (!resource)
+						break;
 					if (IsBlueprintItem(CodexFields::ItemOf(resource)))
 					{
 						LOG_TRACE("CodexRecipes: [recipe] %s - dropped input '%s' (BlueprintItem).",
@@ -669,10 +749,14 @@ namespace CodexRecipes
 
 			LOG_INFO("CodexRecipes: scanning crafting buildings for recipes...");
 
+			g_layoutRejected = false;
+
 			try
 			{
 				const LinkedCollectionMap linked = CollectLinkedCollections();
-				const std::vector<CraftingBuilding> buildings = CollectCraftingBuildings();
+				// A layout the game no longer matches builds an empty database.
+				const std::vector<CraftingBuilding> buildings = g_layoutRejected
+					? std::vector<CraftingBuilding>() : CollectCraftingBuildings();
 
 				int linkedCount = 0;
 				for (const auto& entry : linked)
