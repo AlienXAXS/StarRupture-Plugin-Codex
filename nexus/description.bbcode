@@ -16,7 +16,7 @@ An in-game recipe browser. Search any item, recipe or building, see what it is m
 
 [line]
 
-[size=5][b]New in 1.0[/b][/size]
+[size=5][b]Pins and game menus[/b][/size]
 
 [b]Pin and open recipes from the game's own menus.[/b] ✦ In the recipe station, the corporation terminal and a machine's menu, hover an item until the game shows its tooltip, then:
 
@@ -46,16 +46,19 @@ It works on items a recipe makes. Inventory slots keep the game's own right-clic
 [b]Pins under menus and tucked.[/b] ✦
 [list]
 [*]While any game menu is open (the Escape menu, a machine's screen, the build menu and the rest), a small arrow button appears just above the top pinned card, or under the pins when there is no room above. It controls all pins together.
-[*]The [b]double up arrow[/b] tucks the pins into itself: each one shrinks into the button and disappears, so the menu underneath can be used. The arrow then turns into a [b]double down arrow[/b], which brings them back out the same way. The arrow always stays clickable.
+[*]The [b]double up arrow[/b] tucks the pins into itself: each one shrinks into the button and disappears, so the menu underneath can be used. The arrow then turns into a [b]double down arrow[/b], which brings them back out the same way. The arrow always stays clickable. It now shows in the build menu too, and whenever the pins' own buttons show: while the Codex or the mod loader menu is open, or while the mouse cursor is showing. While you are placing a building it stays hidden.
 [*]Tucked pins stay tucked after the menu closes and on every other screen, and across a restart: they stay out of the way in gameplay until you open a menu and click the arrow to expand them.
 [*]A pin you add while the pins are tucked is tucked with them. The first pin after none, and unpinning the last one, start the pins out again.
 [/list]
 
-[b]Icons load when they are shown.[/b] ✦
+[b]Icons come from the ModLoader's image library.[/b] ✦
 [list]
-[*]Item icons are copied the first time they are drawn, not all at launch, so Codex no longer holds the loading screen for them.
+[*]Item icons are drawn from the ModLoader's shared image library, which reads each one the first time it is shown and keeps a small copy for the session. Codex no longer loads or keeps icons of its own, and does not hold the loading screen for them.
 [*]A row whose icon is still loading keeps its place, so nothing moves when the icon appears.
+[*]Item pictures in a recipe's details and in a building's recipe grid are bigger, about 40 px, and all item pictures grow with the mod loader's font setting.
 [/list]
+
+[b]Game data from the version object map.[/b] ✦ Codex now reads its game data (struct sizes and recipe function parameters) from the loader's version object map, so a game update needs a version map update instead of a new Codex.
 
 Coming in the next update: tooltip prompts, so the game's own tooltips show the right-click and Ctrl + right-click keys, in the same style as the game's prompts.
 
@@ -120,7 +123,7 @@ An item a planner does not list opens the planner without an item. Only http and
 [*]Load a save and press [b]N[/b]
 [/list]
 
-Requires [url=https://www.nexusmods.com/starrupture/mods/89]AlienX's Mod Loader[/url] v1.23.0 or later (plugin interface v75). On an older loader the plugin shows "Needs loader" and stays off.
+Requires ModLoader 1.24.0 or newer ([url=https://www.nexusmods.com/starrupture/mods/89]AlienX's Mod Loader[/url]).
 
 [line]
 

@@ -10,7 +10,7 @@ what it produces.
 
 ---
 
-## New in 1.0
+## Pins and game menus
 
 - **Pin and open recipes from the game's own menus** <sup>[✦](#msantoro12)</sup> -- in the
   recipe station, the corporation terminal or a machine's menu, hover an item until the game
