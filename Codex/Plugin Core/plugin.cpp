@@ -44,6 +44,7 @@ static void StopCodex()
 	CodexTooltipPin::Shutdown(g_self);
 	CodexUI::Shutdown(g_self);
 	CodexRecipes::Shutdown();
+	CodexIcons::Shutdown(g_self);
 	g_codexStarted = false;
 }
 

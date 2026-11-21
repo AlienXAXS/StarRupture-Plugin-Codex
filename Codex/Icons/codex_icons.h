@@ -19,6 +19,10 @@ namespace CodexIcons
 	// have them ready. Call once from PluginInit.
 	void Init(IPluginSelf* self);
 
+	// Gives the item images back, so the library stops having them ready. Safe to
+	// call again.
+	void Shutdown(IPluginSelf* self);
+
 	// Draws an item's icon (its id from ItemImage) at the cursor, size by size,
 	// and moves on by the gap after it. An icon that is still loading, or an item
 	// with none, holds its place, so the text after it does not move. Call from a

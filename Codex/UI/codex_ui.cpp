@@ -3454,6 +3454,10 @@ namespace CodexUI
 
 	void Shutdown(IPluginSelf* self)
 	{
+		g_selectedNativeRecipe = nullptr;
+		g_selectedBuildingGroup.clear();
+		g_requestedTab = DetailTab::None;
+		g_requestedTier = 0;
 		g_restoreWaiting = false;
 		g_restoreRender = false;
 		g_closeRender = false;

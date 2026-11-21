@@ -55,9 +55,11 @@ what it produces.
   the item and recipe data Codex reads, and where the recipe functions put their results, now come
   from the ModLoader (its version object map, the version map from here on) instead of being
   built into the plugin. If they can't be resolved or don't fit the game's recipe data, the recipe
-  codex turns off and logs one line. The rest of the mod keeps running. A server host can also
-  switch the recipe codex off while the game runs: its windows, pins, keys and the rows it adds to
-  the game's tooltips go away, and they come back when the host turns it on again.
+  codex turns off and logs one line. The rest of the mod keeps running.
+
+- **Host rules** <sup>[✦](#msantoro12)</sup> -- a server host can switch the recipe codex off while
+  the game runs. Its windows, pins, keys and the rows it adds to the game's tooltips go away, and
+  they come back when the host turns it on again.
 
 ---
 
