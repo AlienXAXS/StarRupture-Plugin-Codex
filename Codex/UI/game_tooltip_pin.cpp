@@ -583,6 +583,9 @@ namespace CodexTooltipPin
 
 		void OnPinKeyPressed(EModKey /*key*/, EModKeyEvent event)
 		{
+			if (!CodexFields::RecipeCodex.On())
+				return;
+
 			if (event != EModKeyEvent::Pressed || PlannerKeyHeld())
 				return;
 
@@ -610,6 +613,9 @@ namespace CodexTooltipPin
 
 		void OnPlannerKeyPressed(EModKey /*key*/, EModKeyEvent event)
 		{
+			if (!CodexFields::RecipeCodex.On())
+				return;
+
 			if (event != EModKeyEvent::Pressed)
 				return;
 
@@ -653,6 +659,9 @@ namespace CodexTooltipPin
 	// On the game thread, from the engine tick.
 	void Tick(float deltaSeconds)
 	{
+		if (!CodexFields::RecipeCodex.On())
+			return;
+
 		// A tooltip can only be open while the player's cursor is up.
 		const bool cursorUp = (UIState() & PLUGIN_UI_CURSOR_UP) != 0;
 

@@ -338,6 +338,9 @@ namespace CodexUI
 
 		void RenderCloserWidget(IModLoaderImGui* imgui)
 		{
+			if (!CodexFields::RecipeCodex.On())
+				return;
+
 			if (g_self && g_self->hooks->UI && g_closerWidget)
 				g_self->hooks->UI->SetWidgetVisible(g_closerWidget, false);
 			if (g_restoreRender.exchange(false))
@@ -373,6 +376,9 @@ namespace CodexUI
 
 		void OnEscapePressed(EModKey /*key*/, EModKeyEvent event)
 		{
+			if (!CodexFields::RecipeCodex.On())
+				return;
+
 			if (event != EModKeyEvent::Pressed)
 				return;
 			if (g_searchVisible)
@@ -383,6 +389,9 @@ namespace CodexUI
 
 		void OnSearchKeyPressed(EModKey /*key*/, EModKeyEvent event)
 		{
+			if (!CodexFields::RecipeCodex.On())
+				return;
+
 			if (event != EModKeyEvent::Pressed)
 				return;
 			if (g_searchVisible)
@@ -403,6 +412,9 @@ namespace CodexUI
 		// on the same key (N), so this never also opens the search box.
 		void OnCodexKeyPressed(EModKey /*key*/, EModKeyEvent event)
 		{
+			if (!CodexFields::RecipeCodex.On())
+				return;
+
 			if (event != EModKeyEvent::Pressed)
 				return;
 
@@ -780,6 +792,9 @@ namespace CodexUI
 
 		void RenderSearchWidget(IModLoaderImGui* imgui)
 		{
+			if (!CodexFields::RecipeCodex.On())
+				return;
+
 			const float fontScale = (std::max)(1.0f, imgui->GetFontSize() / kBaselineFontSize);
 			g_searchHints.width = kSearchBoxBaseWidth * fontScale;
 
@@ -1219,6 +1234,9 @@ namespace CodexUI
 
 		void RenderDetailWidget(IModLoaderImGui* imgui)
 		{
+			if (!CodexFields::RecipeCodex.On())
+				return;
+
 			// Opened from the mod loader's own panel list rather than via
 			// OpenDetail - adopt it so Escape and our state track it too.
 			if (!g_detailVisible)
@@ -2979,6 +2997,9 @@ namespace CodexUI
 
 		void RenderPinSlot(int index, IModLoaderImGui* imgui)
 		{
+			if (!CodexFields::RecipeCodex.On())
+				return;
+
 			PinSlot& slot = g_pins[index];
 
 			// Restored under a saved tuck: measured and placed without being seen.
@@ -3168,6 +3189,9 @@ namespace CodexUI
 		// The arrow's window, put on the right edge of the top pin for the next frame.
 		void RenderPinLayerArrow(IModLoaderImGui* imgui)
 		{
+			if (!CodexFields::RecipeCodex.On())
+				return;
+
 			// With the pins tucked away their windows do not run the frame's setup.
 			if (g_tuckT > 0.0f)
 				AdvancePinClock(imgui);
@@ -3312,13 +3336,11 @@ namespace CodexUI
 		{
 			for (PinSlot& slot : g_pins)
 			{
-				slot.nativeRecipe = nullptr;
-				slot.recipeKey.clear();
 				if (slot.widget)
-				{
 					self->hooks->UI->UnregisterWidget(slot.widget);
-					slot.widget = nullptr;
-				}
+				// Back to a new slot, so nothing of an earlier pin shows when the
+				// codex comes back on.
+				slot = PinSlot{};
 			}
 		}
 	}

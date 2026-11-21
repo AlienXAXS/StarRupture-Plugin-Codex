@@ -14,9 +14,62 @@ static IPluginSelf* g_self = nullptr;
 
 IPluginSelf* GetSelf() { return g_self; }
 
+// What PluginInit actually set up, so PluginShutdown undoes exactly that
+// and never reads the live feature flag.
+static bool g_callbacksRegistered = false; // the tick and the load callback are on
+static bool g_codexStarted = false;        // the recipe codex is up
+
+static void OnExperienceLoadComplete();
+
+// Brings the recipe codex up: the recipe database, the windows, the game-menu pin.
+static void StartCodex(IPluginSelf* self)
+{
+	// Tell the image library the item icons are the ones Codex draws
+	CodexIcons::Init(self);
+
+	// Recipe database + search/detail UI
+	CodexRecipes::Init(self);
+	CodexUI::Init(self);
+	CodexTooltipPin::Init(self);
+	g_codexStarted = true;
+
+	// A session may already be in progress (hot-reload, or the feature coming
+	// back on), so scan now.
+	OnExperienceLoadComplete();
+}
+
+// Takes the recipe codex down, including the rows it added to the game's tooltips.
+static void StopCodex()
+{
+	CodexTooltipPin::Shutdown(g_self);
+	CodexUI::Shutdown(g_self);
+	CodexRecipes::Shutdown();
+	g_codexStarted = false;
+}
+
 // Drives CodexUI::Tick() so the saved pins are put back once the recipes are ready.
+// Also follows the feature flag: a host can switch the codex off and back on while
+// the game runs.
 static void OnEngineTick(float deltaSeconds)
 {
+	const bool on = CodexFields::RecipeCodex.On();
+	if (on != g_codexStarted)
+	{
+		if (on)
+		{
+			LOG_INFO("The recipe codex is back on");
+			StartCodex(g_self);
+		}
+		else
+		{
+			LOG_INFO("The recipe codex is off");
+			StopCodex();
+		}
+	}
+
+	if (!on)
+		return;
+
 	CodexUI::Tick();
 	CodexTooltipPin::Tick(deltaSeconds);
 }
@@ -27,6 +80,9 @@ static void OnEngineTick(float deltaSeconds)
 // so the scan is gated to the main game world.
 static void OnExperienceLoadComplete()
 {
+	if (!CodexFields::RecipeCodex.On())
+		return;
+
 	SDK::UWorld* world = PluginSdkRuntime::GetWorld();
 	if (!world || world->GetName() != "ChimeraMain")
 	{
@@ -89,29 +145,19 @@ extern "C" {
 			return true; // Return true so plugin loads but doesn't activate
 		}
 
-		if (!CodexFields::RecipeCodex.On())
-		{
-			LOG_WARN("The recipe codex is off: the game update moved something it reads");
-			return true;
-		}
-
-		// Tell the image library the item icons are the ones Codex draws
-		CodexIcons::Init(self);
-
-		// Recipe database + search/detail UI
-		CodexRecipes::Init(self);
-		CodexUI::Init(self);
-		CodexTooltipPin::Init(self);
-
+		// The tick starts the codex when the feature is on, and stops and restarts
+		// it as the flag changes; an off start is the same state.
 		if (self->hooks->Engine)
 			self->hooks->Engine->RegisterOnTick(&OnEngineTick);
 
 		if (self->hooks->World)
 			self->hooks->World->RegisterOnExperienceLoadComplete(&OnExperienceLoadComplete);
+		g_callbacksRegistered = true;
 
-		// Hot-reload: experience-load-complete may have already fired before we
-		// registered, so if a session is already in progress, scan now.
-		OnExperienceLoadComplete();
+		if (CodexFields::RecipeCodex.On())
+			StartCodex(self);
+		else
+			LOG_WARN("The recipe codex is off: the game update moved something it reads, or the host turned it off");
 
 		LOG_INFO("Plugin initialized successfully");
 
@@ -122,15 +168,18 @@ extern "C" {
 	{
 		LOG_INFO("Plugin shutting down...");
 
-		if (g_self && g_self->hooks->Engine)
-			g_self->hooks->Engine->UnregisterOnTick(&OnEngineTick);
+		if (g_callbacksRegistered)
+		{
+			if (g_self->hooks->Engine)
+				g_self->hooks->Engine->UnregisterOnTick(&OnEngineTick);
 
-		if (g_self && g_self->hooks->World)
-			g_self->hooks->World->UnregisterOnExperienceLoadComplete(&OnExperienceLoadComplete);
+			if (g_self->hooks->World)
+				g_self->hooks->World->UnregisterOnExperienceLoadComplete(&OnExperienceLoadComplete);
+			g_callbacksRegistered = false;
+		}
 
-		CodexTooltipPin::Shutdown(g_self);
-		CodexUI::Shutdown(g_self);
-		CodexRecipes::Shutdown();
+		if (g_codexStarted)
+			StopCodex();
 
 		g_self = nullptr;
 	}
