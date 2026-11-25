@@ -3297,14 +3297,14 @@ namespace CodexUI
 
 		void UnregisterPinLayerArrow(IPluginSelf* self)
 		{
-			g_tuckT = 0.0f;
-			g_layerPlaceFrames = 0;
-			g_layerShown = false;
 			if (g_layerWidget)
 			{
 				self->hooks->UI->UnregisterWidget(g_layerWidget);
 				g_layerWidget = nullptr;
 			}
+			g_tuckT = 0.0f;
+			g_layerPlaceFrames = 0;
+			g_layerShown = false;
 		}
 
 		void RegisterPinSlots(IPluginSelf* self)
@@ -3338,9 +3338,29 @@ namespace CodexUI
 			{
 				if (slot.widget)
 					self->hooks->UI->UnregisterWidget(slot.widget);
-				// Back to a new slot, so nothing of an earlier pin shows when the
-				// codex comes back on.
+			}
+		}
+
+		// Back to new slots, so nothing of an earlier pin shows when the codex
+		// comes back on. Only after every widget that reads g_pins is gone.
+		void ResetPinSlots()
+		{
+			for (PinSlot& slot : g_pins)
 				slot = PinSlot{};
+		}
+
+		void ResetSelectionState()
+		{
+			g_selectedNativeRecipe = nullptr;
+			g_selectedBuildingGroup.clear();
+			g_requestedTab = DetailTab::None;
+			g_requestedTier = 0;
+			g_restoreWaiting = false;
+			g_restoreRender = false;
+			g_closeRender = false;
+			{
+				std::lock_guard<std::mutex> lock(g_gamePinMutex);
+				g_gamePinItem.clear();
 			}
 		}
 	}
@@ -3454,20 +3474,9 @@ namespace CodexUI
 
 	void Shutdown(IPluginSelf* self)
 	{
-		g_selectedNativeRecipe = nullptr;
-		g_selectedBuildingGroup.clear();
-		g_requestedTab = DetailTab::None;
-		g_requestedTier = 0;
-		g_restoreWaiting = false;
-		g_restoreRender = false;
-		g_closeRender = false;
-		{
-			std::lock_guard<std::mutex> lock(g_gamePinMutex);
-			g_gamePinItem.clear();
-		}
-
 		if (!self->hooks->UI)
 		{
+			ResetSelectionState();
 			g_self = nullptr;
 			return;
 		}
@@ -3507,6 +3516,9 @@ namespace CodexUI
 			g_detailPanel = nullptr;
 		}
 
+		// Every widget and the panel are unregistered; nothing reads this state now.
+		ResetPinSlots();
+		ResetSelectionState();
 		g_self = nullptr;
 	}
 }

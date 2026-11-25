@@ -1,8 +1,3 @@
-- Item icons now come from the ModLoader's image library, so Codex no longer loads or keeps icons of its own
-- Item pictures in a recipe's details and in a building's recipe grid are bigger, about 40 px, and all item pictures grow with the mod loader's font setting
-- The pin tuck arrow now shows in the build menu, whenever the mouse cursor is showing
-- Codex reads the size of its recipe and item data, and where the recipe functions put their results, from the ModLoader's version object map, so Codex follows the game's own layout instead of a size built into the plugin
-- The sizes come from the loader. If they can't be resolved or don't fit the game's recipe data, the recipe codex turns off and logs one line instead of reading wrong data
-- Fixed a repeated-ID warning that could show in the Recipe tab
 - A server host can switch the recipe codex off while the game runs; its windows, pins, keys and tooltip rows go away until the host turns it back on
-- Needs ModLoader 1.24.0 or newer
+- Switching the recipe codex off now also gives back its item pictures and clears the open recipe and tab, so turning it back on starts clean
+- Codex now tells the ModLoader which plugin interface level it needs, so the loader only refuses it when it truly can't run it
