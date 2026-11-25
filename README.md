@@ -129,6 +129,7 @@ what it produces.
 
   Items a planner does not list open it without an item. To add your own planner, set `Planner`
   to `Custom` and give `CustomUrlTemplate` an address with `{item}`, `{name}` or `{game}`.
+- **Go** -- the recipe tab has a **Go** button that shows where the recipe's item is produced, using the Go to item plugin (not released yet). It only shows when that plugin is installed.
 
 <img src="images/codex-pinned-cards.png" width="300" alt="Pinned recipe cards at the screen edge, each with Open and Planner buttons">
 <img src="images/codex-launch-planner.png" width="420" alt="The Codex recipe tab for Nanofiber with the Launch planner button">

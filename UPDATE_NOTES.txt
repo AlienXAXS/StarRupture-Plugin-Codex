@@ -4,4 +4,5 @@
 - Codex reads the size of its recipe and item data, and where the recipe functions put their results, from the ModLoader's version object map, so Codex follows the game's own layout instead of a size built into the plugin
 - The sizes come from the loader. If they can't be resolved or don't fit the game's recipe data, the recipe codex turns off and logs one line instead of reading wrong data
 - Fixed a repeated-ID warning that could show in the Recipe tab
+- New Go button on the recipe tab that shows where the recipe's item is produced; it only appears when the Go to item plugin is installed (not released yet)
 - Needs ModLoader 1.24.0 or newer

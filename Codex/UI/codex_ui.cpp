@@ -4,6 +4,7 @@
 #include "Planner/codex_planner.h"
 #include "Icons/codex_icons.h"
 #include "plugin_images.h"
+#include "plugin_go_to_item.h"
 #include "Plugin Core/Helpers/plugin_helpers.h"
 #include "Plugin Core/Config/plugin_config.h"
 #include "Plugin Core/codex_fields.h"
@@ -993,6 +994,34 @@ namespace CodexUI
 			imgui->SetItemTooltip("Open a production planner for this item in your browser.");
 		}
 
+		// The Go button: tracks the item in the Go to item plugin, which marks where
+		// it is produced. Nothing is drawn without that plugin. The API is fetched
+		// on every call because a RELOAD can unload the plugin between frames.
+		// The button is dimmed, not disabled, while no source is known yet: the
+		// item still waits in the plugin's tracked set.
+		void RenderGoToItemButton(IModLoaderImGui* imgui, const std::string& uniqueItemName)
+		{
+			const GoToItemApi* api = GoToItem::Get();
+			if (!api)
+				return;
+
+			constexpr int kAlphaVar = 0; // ImGuiStyleVar_Alpha
+			const int32_t canTrack = api->CanTrack(uniqueItemName.c_str());
+
+			imgui->SameLine(0.0f, -1.0f);
+			if (canTrack != GOTO_OK)
+				imgui->PushStyleVarFloat(kAlphaVar, 0.6f);
+			const bool clicked = imgui->SmallButton("Go");
+			if (canTrack != GOTO_OK)
+				imgui->PopStyleVar(1);
+			imgui->SetItemTooltip(canTrack == GOTO_OK
+				? "Show where this item is produced."
+				: api->ResultToString(canTrack));
+
+			if (clicked)
+				api->TrackItem(uniqueItemName.c_str());
+		}
+
 		void RenderRecipeTab(IModLoaderImGui* imgui)
 		{
 			CodexRecipes::RecipeInfo info;
@@ -1015,6 +1044,7 @@ namespace CodexUI
 
 			imgui->SameLine(0.0f, -1.0f);
 			RenderLaunchPlannerButton(imgui, info);
+			RenderGoToItemButton(imgui, info.output.uniqueItemName);
 
 			imgui->SameLine(0.0f, 12.0f);
 			imgui->SeparatorText(info.displayName.c_str());
