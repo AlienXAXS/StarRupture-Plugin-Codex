@@ -104,7 +104,7 @@ static PluginInfo s_pluginInfo = {
 	MODLOADER_BUILD_TAG,
 	"AlienX",
 	"A minimal example plugin showing the basic structure required by the mod loader",
-	PLUGIN_INTERFACE_VERSION,
+	PLUGIN_DECLARED_INTERFACE,
 	PLUGIN_TARGET_CLIENT,
 	PLUGIN_GAME_BUILT_CL,
 	PLUGIN_MAP_MIGRATED
