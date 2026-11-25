@@ -57,9 +57,6 @@ what it produces.
   built into the plugin. If they can't be resolved or don't fit the game's recipe data, the recipe
   codex turns off and logs one line. The rest of the mod keeps running.
 
-- **Host rules** <sup>[✦](#msantoro12)</sup> -- a server host can switch the recipe codex off while
-  the game runs. Its windows, pins, keys and the rows it adds to the game's tooltips go away, and
-  they come back when the host turns it on again.
 
 ---
 

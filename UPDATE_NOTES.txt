@@ -1,3 +1,1 @@
-- A server host can switch the recipe codex off while the game runs; its windows, pins, keys and tooltip rows go away until the host turns it back on
-- Switching the recipe codex off now also gives back its item pictures and clears the open recipe and tab, so turning it back on starts clean
 - Codex now loads on every ModLoader that can run it
