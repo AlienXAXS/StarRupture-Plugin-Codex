@@ -2763,7 +2763,6 @@ namespace CodexUI
 		constexpr int kColText          = 0;
 		constexpr int kColWindowBg      = 2;
 		constexpr int kColBorder        = 5;
-		constexpr int kStyleVarAlpha    = 0; // ImGuiStyleVar_Alpha
 		constexpr int kColButtonHovered = 22;
 		constexpr int kColButtonActive  = 23;
 
