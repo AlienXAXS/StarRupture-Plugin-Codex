@@ -994,32 +994,58 @@ namespace CodexUI
 			imgui->SetItemTooltip("Open a production planner for this item in your browser.");
 		}
 
+		// ImGuiStyleVar_Alpha, for dimming one widget.
+		constexpr int kStyleVarAlpha = 0;
+
+		// The item the last Go click could not track, and why (render thread only).
+		// Written on a click, so the string is not rebuilt per frame.
+		std::string g_goFailedItem;
+		int32_t     g_goFailedResult = 0;
+
 		// The Go button: tracks the item in the Go to item plugin, which marks where
-		// it is produced. Nothing is drawn without that plugin. The API is fetched
-		// on every call because a RELOAD can unload the plugin between frames.
-		// The button is dimmed, not disabled, while no source is known yet: the
-		// item still waits in the plugin's tracked set.
+		// it is produced. Nothing is drawn without that plugin, or for a key the
+		// plugin does not know as an item. The API is fetched on every call because
+		// a RELOAD can unload the plugin between frames. The button is dimmed, not
+		// disabled, while no source is known yet: the item still waits in the
+		// plugin's tracked set. Like Pin, it reads "Tracked" and is disabled once
+		// the item is tracked.
 		void RenderGoToItemButton(IModLoaderImGui* imgui, const std::string& uniqueItemName)
 		{
 			const GoToItemApi* api = GoToItem::Get();
 			if (!api)
 				return;
 
-			constexpr int kAlphaVar = 0; // ImGuiStyleVar_Alpha
-			const int32_t canTrack = api->CanTrack(uniqueItemName.c_str());
+			const char* key = uniqueItemName.c_str();
+			const bool tracked = api->IsTracked(key) != 0;
+			const int32_t canTrack = api->CanTrack(key);
+			if (canTrack == GOTO_UNKNOWN_ITEM && !tracked)
+				return;
 
+			const bool dim = !tracked && canTrack != GOTO_OK;
 			imgui->SameLine(0.0f, -1.0f);
-			if (canTrack != GOTO_OK)
-				imgui->PushStyleVarFloat(kAlphaVar, 0.6f);
-			const bool clicked = imgui->SmallButton("Go");
-			if (canTrack != GOTO_OK)
+			imgui->BeginDisabled(tracked);
+			if (dim)
+				imgui->PushStyleVarFloat(kStyleVarAlpha, 0.6f);
+			const bool clicked = imgui->SmallButton(tracked ? "Tracked" : "Go");
+			if (dim)
 				imgui->PopStyleVar(1);
-			imgui->SetItemTooltip(canTrack == GOTO_OK
-				? "Show where this item is produced."
-				: api->ResultToString(canTrack));
+			imgui->EndDisabled();
+
+			if (tracked)
+				imgui->SetItemTooltip("Already tracked in Go to item.");
+			else if (g_goFailedResult < 0 && g_goFailedItem == uniqueItemName)
+				imgui->SetItemTooltip(api->ResultToString(g_goFailedResult));
+			else if (canTrack != GOTO_OK)
+				imgui->SetItemTooltip(api->ResultToString(canTrack));
+			else
+				imgui->SetItemTooltip("Show where this item is produced.");
 
 			if (clicked)
-				api->TrackItem(uniqueItemName.c_str());
+			{
+				const int32_t result = api->TrackItem(key);
+				g_goFailedResult = result < 0 ? result : 0;
+				g_goFailedItem = result < 0 ? uniqueItemName : std::string();
+			}
 		}
 
 		void RenderRecipeTab(IModLoaderImGui* imgui)
