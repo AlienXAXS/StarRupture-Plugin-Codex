@@ -32,6 +32,13 @@ namespace CodexConfig
 		},
 		{
 			"Menu",
+			"EscapeCloses",
+			ConfigValueType::Boolean,
+			"true",
+			"Whether Esc closes the search box and the full Codex window. When off, the Codex key or picking a result closes the search box"
+		},
+		{
+			"Menu",
 			"GamePinKey",
 			ConfigValueType::Keybind,
 			"RightMouseButton",
@@ -258,6 +265,12 @@ namespace CodexConfig
 			if (s_self && s_self->config->ReadString(s_self, "Menu", "CodexKey", buffer, sizeof(buffer), "Shift+N"))
 				return buffer;
 			return "Shift+N";
+		}
+
+		// Whether Escape closes the search box and the full Codex window.
+		static bool GetEscapeCloses()
+		{
+			return s_self ? s_self->config->ReadBool(s_self, "Menu", "EscapeCloses", true) : true;
 		}
 
 		// Returns the keybind that pins the item in the game's open item tooltip

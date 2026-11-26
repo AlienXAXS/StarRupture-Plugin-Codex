@@ -57,6 +57,7 @@ namespace CodexUI
 		// closing the detail panel (CloseDetail) and the item a game menu asked
 		// to pin (PinProductOf), which any thread may set.
 		std::atomic<bool> g_closeRender{ false };
+		std::atomic<bool> g_escapeCloses{ true };
 		std::mutex        g_gamePinMutex;
 		std::string       g_gamePinItem;
 
@@ -271,6 +272,10 @@ namespace CodexUI
 
 		void ShowDetailPanel()
 		{
+			// Whatever is being opened has to be seen.
+			if (g_self && g_self->hooks->UI && g_detailPanel)
+				g_self->hooks->UI->SetPanelCollapsed(g_detailPanel, false);
+
 			if (g_detailVisible)
 				return;
 
@@ -379,7 +384,7 @@ namespace CodexUI
 			if (!CodexFields::RecipeCodex.On())
 				return;
 
-			if (event != EModKeyEvent::Pressed)
+			if (event != EModKeyEvent::Pressed || !g_escapeCloses.load(std::memory_order_relaxed))
 				return;
 			if (g_searchVisible)
 				CloseSearch();
@@ -1232,11 +1237,9 @@ namespace CodexUI
 			imgui->EndChild();
 		}
 
-		void RenderDetailWidget(IModLoaderImGui* imgui)
+		// Runs on every frame the Codex window is drawn, collapsed or not.
+		void TrackDetailPanel(IModLoaderImGui* imgui)
 		{
-			if (!CodexFields::RecipeCodex.On())
-				return;
-
 			// Opened from the mod loader's own panel list rather than via
 			// OpenDetail - adopt it so Escape and our state track it too.
 			if (!g_detailVisible)
@@ -1248,6 +1251,14 @@ namespace CodexUI
 					g_requestedTab = DetailTab::Buildings;
 			}
 			g_detailLastFrame = imgui->GetFrameCount();
+		}
+
+		void RenderDetailWidget(IModLoaderImGui* imgui)
+		{
+			if (!CodexFields::RecipeCodex.On())
+				return;
+
+			TrackDetailPanel(imgui);
 
 			// Opens the search box over this window; picking a result then
 			// navigates here instead of opening a new window.
@@ -1656,6 +1667,13 @@ namespace CodexUI
 		{
 			if (!section || !key || !newValue || strcmp(section, "Menu") != 0)
 				return;
+
+			if (strcmp(key, "EscapeCloses") == 0)
+			{
+				g_escapeCloses.store(_stricmp(newValue, "true") == 0 || strcmp(newValue, "1") == 0,
+					std::memory_order_relaxed);
+				return;
+			}
 
 			// A cleared or hand-edited search box spot: re-place an open box.
 			const bool searchX = strcmp(key, "SearchBoxX") == 0;
@@ -2767,6 +2785,24 @@ namespace CodexUI
 			imgui->DL_AddText(dl, cx - iconW * 0.5f, cy - size * 0.5f, imgui->GetColorU32FromCol(kColText, 1.0f), icon);
 		}
 
+		// The Codex window's collapse button, on the title bar the loader draws.
+		// A collapsed window stays open: Escape and the Codex key still close it.
+		void RenderDetailTitleBar(IModLoaderImGui* imgui)
+		{
+			if (!CodexFields::RecipeCodex.On() || !g_self || !g_self->hooks->UI)
+				return;
+
+			TrackDetailPanel(imgui);
+
+			const bool collapsed = g_self->hooks->UI->IsPanelCollapsed(g_detailPanel);
+			char label[32];
+			snprintf(label, sizeof(label), "%s###Codex_Collapse", collapsed ? kIconExpand : kIconCollapse);
+			imgui->SameLine(0.0f, -1.0f);
+			if (imgui->SmallButton(label))
+				g_self->hooks->UI->SetPanelCollapsed(g_detailPanel, !collapsed);
+			imgui->SetItemTooltip(collapsed ? "Expand" : "Collapse");
+		}
+
 		enum class TitleGlyph { Close, Collapse, Expand };
 
 		// One button of a pinned window's title bar: an item of its own, like
@@ -3400,6 +3436,7 @@ namespace CodexUI
 		g_detailDesc.buttonLabel = "Codex";
 		g_detailDesc.windowTitle = "Codex";
 		g_detailDesc.renderFn    = &RenderDetailWidget;
+		g_detailDesc.titleBarFn  = &RenderDetailTitleBar;
 		g_detailPanel = self->hooks->UI->RegisterPanel(&g_detailDesc);
 		self->hooks->UI->RegisterOnPanelWindowClosed(&OnDetailPanelClosed);
 
@@ -3426,6 +3463,7 @@ namespace CodexUI
 			self->hooks->UI->SetWidgetVisible(g_closerWidget, false);
 
 		CodexConfig::Config::GetSearchBoxPos(g_searchSavedX, g_searchSavedY);
+		g_escapeCloses.store(CodexConfig::Config::GetEscapeCloses(), std::memory_order_relaxed);
 		LoadPinSettings();
 		RegisterPinSlots(self);
 		RegisterPinLayerArrow(self);
