@@ -1021,54 +1021,151 @@ namespace CodexUI
 		// ImGuiStyleVar_Alpha, for dimming one widget.
 		constexpr int kStyleVarAlpha = 0;
 
-		// The item the last Go click could not track, and why (render thread only).
-		// Written on a click, so the string is not rebuilt per frame.
-		std::string g_goFailedItem;
-		int32_t     g_goFailedResult = 0;
-
-		// The Go button: tracks the item in the Go to item plugin, which marks where
-		// it is produced. Nothing is drawn without that plugin, or for a key the
-		// plugin does not know as an item. The API is fetched on every call because
-		// a RELOAD can unload the plugin between frames. The button is dimmed, not
-		// disabled, while no source is known yet: the item still waits in the
-		// plugin's tracked set. Like Pin, it reads "Tracked" and is disabled once
-		// the item is tracked.
-		void RenderGoToItemButton(IModLoaderImGui* imgui, const std::string& uniqueItemName)
+		// The Go button tracks the recipe's item in the Go to item plugin, which
+		// marks where it is produced. That plugin's API is game thread only, so
+		// the recipe tab says which item it shows and queues clicks, and the
+		// tick answers with what to draw. g_goMutex guards everything in g_go.
+		struct GoButtonState
 		{
-			const GoToItemApi* api = GoToItem::Get();
+			char itemKey[GOTOITEM_KEY_CHARS]; // the item this answer is for
+			bool show;
+			bool tracked;
+			bool dim; // no source is known yet; the item can still be tracked
+			char tooltip[160];
+		};
+
+		struct GoButton
+		{
+			char          wanted[GOTOITEM_KEY_CHARS]; // the item the recipe tab shows
+			bool          clicked;                    // Go was pressed for `wanted`
+			int           idleTicks;                  // ticks since the tab last drew
+			GoButtonState state;
+		};
+
+		std::mutex g_goMutex;
+		GoButton   g_go{};
+
+		// The recipe tab counts as closed after this many ticks without a draw.
+		// More than one, as frames and ticks do not run in step.
+		constexpr int kGoIdleTicks = 30;
+
+		// The item the last click could not track, and why (game thread only).
+		char    g_goFailedItem[GOTOITEM_KEY_CHARS] = "";
+		int32_t g_goFailedResult = 0;
+
+		void ResetGoButton()
+		{
+			std::lock_guard<std::mutex> lock(g_goMutex);
+			g_go = {};
+			g_goFailedItem[0] = '\0';
+			g_goFailedResult = 0;
+		}
+
+		// Game thread. Asks the plugin about one item and tracks it if clicked.
+		// The table and its text are only good for this call: a RELOAD can unload
+		// the plugin, so the tooltip is copied.
+		GoButtonState QueryGoButton(const char* key, bool clicked)
+		{
+			GoButtonState state{};
+			strcpy_s(state.itemKey, key);
+
+			const GoToItemApi* api = GoToItem::GetIfOn();
 			if (!api)
-				return;
+			{
+				g_goFailedResult = 0;
+				return state;
+			}
 
-			const char* key = uniqueItemName.c_str();
-			const bool tracked = api->IsTracked(key) != 0;
 			const int32_t canTrack = api->CanTrack(key);
-			if (canTrack == GOTO_UNKNOWN_ITEM && !tracked)
-				return;
-
-			const bool dim = !tracked && canTrack != GOTO_OK;
-			imgui->SameLine(0.0f, -1.0f);
-			imgui->BeginDisabled(tracked);
-			if (dim)
-				imgui->PushStyleVarFloat(kStyleVarAlpha, 0.6f);
-			const bool clicked = imgui->SmallButton(tracked ? "Tracked" : "Go");
-			if (dim)
-				imgui->PopStyleVar(1);
-			imgui->EndDisabled();
-
-			if (tracked)
-				imgui->SetItemTooltip("Already tracked in Go to item.");
-			else if (g_goFailedResult < 0 && g_goFailedItem == uniqueItemName)
-				imgui->SetItemTooltip(api->ResultToString(g_goFailedResult));
-			else if (canTrack != GOTO_OK)
-				imgui->SetItemTooltip(api->ResultToString(canTrack));
-			else
-				imgui->SetItemTooltip("Show where this item is produced.");
+			if (canTrack != GOTO_OK && canTrack != GOTO_NO_LOCATION_YET)
+				return state;
 
 			if (clicked)
 			{
 				const int32_t result = api->TrackItem(key);
 				g_goFailedResult = result < 0 ? result : 0;
-				g_goFailedItem = result < 0 ? uniqueItemName : std::string();
+				strcpy_s(g_goFailedItem, key);
+			}
+
+			state.show = true;
+			state.tracked = api->IsTracked(key) == 1;
+			state.dim = !state.tracked && canTrack != GOTO_OK;
+
+			const char* tooltip = "Show where this item is produced.";
+			if (state.tracked)
+				tooltip = "Already tracked in Go to item.";
+			else if (g_goFailedResult < 0 && strcmp(g_goFailedItem, key) == 0)
+				tooltip = api->ResultToString(g_goFailedResult);
+			else if (canTrack != GOTO_OK)
+				tooltip = api->ResultToString(canTrack);
+			strncpy_s(state.tooltip, tooltip, _TRUNCATE);
+			return state;
+		}
+
+		// Game thread. Does nothing while the recipe tab is not being drawn.
+		void TickGoButton()
+		{
+			char key[GOTOITEM_KEY_CHARS];
+			bool clicked;
+			{
+				std::lock_guard<std::mutex> lock(g_goMutex);
+				if (!g_go.wanted[0])
+					return;
+				if (++g_go.idleTicks > kGoIdleTicks)
+				{
+					g_go = {};
+					g_goFailedResult = 0;
+					return;
+				}
+				strcpy_s(key, g_go.wanted);
+				clicked = g_go.clicked;
+				g_go.clicked = false;
+			}
+
+			const GoButtonState state = QueryGoButton(key, clicked);
+
+			std::lock_guard<std::mutex> lock(g_goMutex);
+			g_go.state = state;
+		}
+
+		// Render thread. Draws what the last tick answered for this item, which
+		// is nothing without the plugin. Like Pin, the button reads "Tracked" and
+		// is disabled once the item is tracked.
+		void RenderGoToItemButton(IModLoaderImGui* imgui, const std::string& uniqueItemName)
+		{
+			// A key too long for the plugin is not one of its items.
+			if (uniqueItemName.empty() || uniqueItemName.size() >= GOTOITEM_KEY_CHARS)
+				return;
+
+			const char* key = uniqueItemName.c_str();
+			GoButtonState state;
+			{
+				std::lock_guard<std::mutex> lock(g_goMutex);
+				if (strcmp(g_go.wanted, key) != 0)
+				{
+					strcpy_s(g_go.wanted, key);
+					g_go.clicked = false;
+				}
+				g_go.idleTicks = 0;
+				state = g_go.state;
+			}
+			if (!state.show || strcmp(state.itemKey, key) != 0)
+				return;
+
+			imgui->SameLine(0.0f, -1.0f);
+			imgui->BeginDisabled(state.tracked);
+			if (state.dim)
+				imgui->PushStyleVarFloat(kStyleVarAlpha, 0.6f);
+			const bool clicked = imgui->SmallButton(state.tracked ? "Tracked" : "Go");
+			if (state.dim)
+				imgui->PopStyleVar(1);
+			imgui->EndDisabled();
+			imgui->SetItemTooltip(state.tooltip);
+
+			if (clicked)
+			{
+				std::lock_guard<std::mutex> lock(g_goMutex);
+				g_go.clicked = true;
 			}
 		}
 
@@ -3453,6 +3550,7 @@ namespace CodexUI
 			g_restoreWaiting = false;
 			g_restoreRender = false;
 			g_closeRender = false;
+			ResetGoButton();
 			{
 				std::lock_guard<std::mutex> lock(g_gamePinMutex);
 				g_gamePinItem.clear();
@@ -3546,6 +3644,8 @@ namespace CodexUI
 
 	void Tick()
 	{
+		TickGoButton();
+
 		if (!g_restoreWaiting || !CodexRecipes::IsReady())
 			return;
 
