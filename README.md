@@ -68,10 +68,12 @@ what it produces.
   too). Close with `Esc`. The box opens centred; drag it anywhere and it opens there next time.
 - **Full Codex window** -- press `Shift+N` (configurable) to open the Codex straight to the
   last recipe you viewed, or the building browser if you haven't picked one yet.
-- **Collapse the Codex window** -- the button on its title bar shrinks it to the title bar and
+- **Collapse the Codex window** <sup>[✦](#msantoro12)</sup> -- the button on its title bar shrinks it to the title bar and
   opens it again. `Esc` and the Codex key still close it while it is collapsed.
-- **Keep Esc for the game** -- turn `EscapeCloses` off and `Esc` no longer closes the Codex
-  window. Close it with the Codex key or its X. `Esc` still closes the search box.
+- **Stop `Esc` closing the Codex window** <sup>[✦](#msantoro12)</sup> -- turn `EscapeCloses` off
+  and close the window with the Codex key or its X. While the window is open during gameplay,
+  `Esc` still does not reach the game; over screens with a cursor it does. `Esc` still closes
+  the search box.
 - **Recipe detail window** -- shows a recipe's inputs and outputs side by side, each with
   icon, name, count, and craft rate (items/min). Click an input to jump to the recipe that
   produces it; click an output to see every recipe that consumes it. Click a building under

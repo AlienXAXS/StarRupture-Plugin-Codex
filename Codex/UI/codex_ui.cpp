@@ -374,6 +374,10 @@ namespace CodexUI
 			g_detailVisible = false;
 			g_consumersItemName.clear();
 			g_detailLastFrame = -1000;
+			// The loader keeps a panel collapsed after a close; its own panel
+			// list would reopen it as a bare title bar.
+			if (g_self && g_self->hooks->UI)
+				g_self->hooks->UI->SetPanelCollapsed(handle, false);
 
 			ReleaseEscapeIfIdle();
 			ReleaseCaptureIfIdle();

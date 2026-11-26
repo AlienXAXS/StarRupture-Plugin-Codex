@@ -432,6 +432,23 @@ namespace CodexTooltipPin
 			if (from->bOverride_MaxDesiredHeight) to->SetMaxDesiredHeight(from->MaxDesiredHeight); else to->ClearMaxDesiredHeight();
 		}
 
+		// A widget a button holds in one of its members, or null (logged the
+		// first time) when it cannot be read or is not of the expected class.
+		template <class Widget>
+		Widget* ButtonPart(PluginLazyField<Widget*>& field, IPluginObjectProperties* properties, SDK::UUserWidget* button)
+		{
+			Widget** part = field.In(properties, button);
+			if (part && *part && (*part)->IsA(Widget::StaticClass()))
+				return *part;
+			static bool logged = false;
+			if (!logged)
+			{
+				logged = true;
+				LOG_DEBUG("CodexTooltipHint: part of the action button layout was not found; it keeps its default.");
+			}
+			return nullptr;
+		}
+
 		// Gives a new button the sizes, label font and inner spacing of the
 		// game's own row. A new button has only its class's defaults; what the
 		// game's row has beyond them is read from it here. A part either button
@@ -440,21 +457,30 @@ namespace CodexTooltipPin
 		{
 			for (auto* field : { &CodexFields::ButtonSizeBox, &CodexFields::ButtonKeyBox, &CodexFields::ButtonIconBox })
 			{
-				SDK::USizeBox** theirs = field->In(properties, model);
-				SDK::USizeBox** mine = field->In(properties, row);
-				if (!theirs || !*theirs || !mine || !*mine)
+				SDK::USizeBox* theirs = ButtonPart(*field, properties, model);
+				SDK::USizeBox* mine = ButtonPart(*field, properties, row);
+				if (!theirs || !mine)
 					continue;
-				CopySizeOverrides(*theirs, *mine);
-				CopyInnerSlot(*theirs, *mine);
+				CopySizeOverrides(theirs, mine);
+				CopyInnerSlot(theirs, mine);
 			}
 
-			SDK::UTextBlock** theirs = CodexFields::ButtonActionName.In(properties, model);
-			SDK::UTextBlock** mine = CodexFields::ButtonActionName.In(properties, row);
-			if (!theirs || !*theirs || !mine || !*mine)
+			SDK::UTextBlock* theirs = ButtonPart(CodexFields::ButtonActionName, properties, model);
+			SDK::UTextBlock* mine = ButtonPart(CodexFields::ButtonActionName, properties, row);
+			if (!theirs || !mine)
 				return;
-			if (const SDK::FSlateFontInfo* font = CodexFields::TextFont.In(properties, *theirs))
-				(*mine)->SetFont(*font);
-			CopyInnerSlot(*theirs, *mine);
+			if (const SDK::FSlateFontInfo* font = CodexFields::TextFont.In(properties, theirs))
+				mine->SetFont(*font);
+			else
+			{
+				static bool logged = false;
+				if (!logged)
+				{
+					logged = true;
+					LOG_DEBUG("CodexTooltipHint: the label font could not be read; it keeps its default.");
+				}
+			}
+			CopyInnerSlot(theirs, mine);
 		}
 
 		// Adds one action row to the tooltip's text list, laid out and keyed as
