@@ -82,6 +82,10 @@ namespace CodexFields
 	// The hint row: the tooltip's text list and the game's action button.
 	inline PluginLazyField<SDK::USizeBox*>    TooltipCraftedIn{ "CraftedInSizeBox" };   // WBP_ToolTipWidget_C: the "Crafted in" line
 	inline PluginLazyField<SDK::UTextBlock*>  ButtonActionName{ "ActionName" };         // CrUW_ActionButton: the label
+	inline PluginLazyField<SDK::USizeBox*>    ButtonSizeBox{ "SizeBox" };               // WBP_ActionButton_C: the box around the row
+	inline PluginLazyField<SDK::USizeBox*>    ButtonKeyBox{ "InputActionWidgetBox" };   // CrUW_ActionButton: the box that sizes the key icon
+	inline PluginLazyField<SDK::USizeBox*>    ButtonIconBox{ "ActionIconSizeBox" };     // CrUW_ActionButton: the box that sizes its other icon
+	inline PluginLazyField<SDK::FSlateFontInfo> TextFont{ "Font" };                     // UTextBlock
 	inline PluginLazyField<SDK::UUserWidget*> TooltipPrompt{ "TooltipPrompt" };         // WBP_ToolTipWidget_C: the game's own action prompt
 	inline PluginLazyField<SDK::UUserWidget*> PromptExpandAction{ "ExpandAction" };     // WBP_TooltipPrompt_C: its "Expand" row
 	inline PluginLazyField<SDK::FDataTableRowHandle> TooltipExpandHandle{ "ExpandHandle" }; // WBP_ToolTipWidget_C: the input action the "Expand" row shows

@@ -235,8 +235,10 @@ namespace CodexTooltipPin
 		// a spacer that keeps the text off the frame's bottom edge. Each row is
 		// the game's own WBP_ActionButton_C, set up as the tooltip's own "Expand"
 		// row is: that row's slot, and the key icon shown through the button's
-		// input action. The rows go in above the closing spacer. The game's
-		// action prompt, which hangs below the tooltip, is left as it is. One set
+		// input action. Icon box sizes, label font and the spacing inside the
+		// button are copied from that row as it is at run time. The rows go in
+		// above the closing spacer. The game's action prompt, which hangs below
+		// the tooltip, is left as it is. One set
 		// of rows per tooltip, taken out again on unload. Off unless the hidden
 		// setting Menu.GameTooltipHints is true.
 
@@ -397,6 +399,64 @@ namespace CodexTooltipPin
 			mine->SetVerticalAlignment(layout.vertical);
 		}
 
+		// The alignment and padding a widget has inside its button, where its
+		// slot is of this class on both buttons.
+		template <class SlotType>
+		bool CopySlot(const SDK::UPanelSlot* from, SDK::UPanelSlot* to)
+		{
+			if (!from || !to || !from->IsA(SlotType::StaticClass()) || !to->IsA(SlotType::StaticClass()))
+				return false;
+			const SlotType* theirs = static_cast<const SlotType*>(from);
+			SlotType* mine = static_cast<SlotType*>(to);
+			mine->SetPadding(theirs->Padding);
+			mine->SetHorizontalAlignment(theirs->HorizontalAlignment);
+			mine->SetVerticalAlignment(theirs->VerticalAlignment);
+			return true;
+		}
+
+		void CopyInnerSlot(const SDK::UWidget* from, SDK::UWidget* to)
+		{
+			if (CopySlot<SDK::UHorizontalBoxSlot>(from->Slot, to->Slot))
+				static_cast<SDK::UHorizontalBoxSlot*>(to->Slot)->SetSize(static_cast<const SDK::UHorizontalBoxSlot*>(from->Slot)->Size);
+			else if (!CopySlot<SDK::UOverlaySlot>(from->Slot, to->Slot))
+				CopySlot<SDK::USizeBoxSlot>(from->Slot, to->Slot);
+		}
+
+		void CopySizeOverrides(const SDK::USizeBox* from, SDK::USizeBox* to)
+		{
+			if (from->bOverride_WidthOverride) to->SetWidthOverride(from->WidthOverride); else to->ClearWidthOverride();
+			if (from->bOverride_HeightOverride) to->SetHeightOverride(from->HeightOverride); else to->ClearHeightOverride();
+			if (from->bOverride_MinDesiredWidth) to->SetMinDesiredWidth(from->MinDesiredWidth); else to->ClearMinDesiredWidth();
+			if (from->bOverride_MinDesiredHeight) to->SetMinDesiredHeight(from->MinDesiredHeight); else to->ClearMinDesiredHeight();
+			if (from->bOverride_MaxDesiredWidth) to->SetMaxDesiredWidth(from->MaxDesiredWidth); else to->ClearMaxDesiredWidth();
+			if (from->bOverride_MaxDesiredHeight) to->SetMaxDesiredHeight(from->MaxDesiredHeight); else to->ClearMaxDesiredHeight();
+		}
+
+		// Gives a new button the sizes, label font and inner spacing of the
+		// game's own row. A new button has only its class's defaults; what the
+		// game's row has beyond them is read from it here. A part either button
+		// lacks is left as it is.
+		void CopyButtonLayout(IPluginObjectProperties* properties, SDK::UUserWidget* model, SDK::UUserWidget* row)
+		{
+			for (auto* field : { &CodexFields::ButtonSizeBox, &CodexFields::ButtonKeyBox, &CodexFields::ButtonIconBox })
+			{
+				SDK::USizeBox** theirs = field->In(properties, model);
+				SDK::USizeBox** mine = field->In(properties, row);
+				if (!theirs || !*theirs || !mine || !*mine)
+					continue;
+				CopySizeOverrides(*theirs, *mine);
+				CopyInnerSlot(*theirs, *mine);
+			}
+
+			SDK::UTextBlock** theirs = CodexFields::ButtonActionName.In(properties, model);
+			SDK::UTextBlock** mine = CodexFields::ButtonActionName.In(properties, row);
+			if (!theirs || !*theirs || !mine || !*mine)
+				return;
+			if (const SDK::FSlateFontInfo* font = CodexFields::TextFont.In(properties, *theirs))
+				(*mine)->SetFont(*font);
+			CopyInnerSlot(*theirs, *mine);
+		}
+
 		// Adds one action row to the tooltip's text list, laid out and keyed as
 		// the tooltip's own "Expand" row; empty on success, else why it could not.
 		std::string AddOneRow(IPluginObjectProperties* properties, SDK::UUserWidget* tooltip, SDK::UPanelWidget* body,
@@ -443,6 +503,9 @@ namespace CodexTooltipPin
 			}
 			const std::wstring wide(label.begin(), label.end());
 			name->SetText(SDK::UKismetTextLibrary::Conv_StringToText(SDK::FString(wide.c_str())));
+			// Last, over what the calls above set.
+			if (model && model->IsA(SDK::UWBP_ActionButton_C::StaticClass()))
+				CopyButtonLayout(properties, static_cast<SDK::UUserWidget*>(model), row);
 
 			const std::string shape = keyAction.DataTable ? "icon of input action '" + keyAction.RowName.ToString() + "'" : why;
 			LOG_DEBUG("CodexTooltipHint: row '%s' added (key '%s', %s).", label.c_str(), key.spelled.c_str(), shape.c_str());
