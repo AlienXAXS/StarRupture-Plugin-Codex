@@ -58,6 +58,7 @@ namespace CodexUI
 		// closing the detail panel (CloseDetail) and the item a game menu asked
 		// to pin (PinProductOf), which any thread may set.
 		std::atomic<bool> g_closeRender{ false };
+		std::atomic<bool> g_escapeCloses{ true };
 		std::mutex        g_gamePinMutex;
 		std::string       g_gamePinItem;
 
@@ -272,6 +273,10 @@ namespace CodexUI
 
 		void ShowDetailPanel()
 		{
+			// Whatever is being opened has to be seen.
+			if (g_self && g_self->hooks->UI && g_detailPanel)
+				g_self->hooks->UI->SetPanelCollapsed(g_detailPanel, false);
+
 			if (g_detailVisible)
 				return;
 
@@ -339,6 +344,9 @@ namespace CodexUI
 
 		void RenderCloserWidget(IModLoaderImGui* imgui)
 		{
+			if (!CodexFields::RecipeCodex.On())
+				return;
+
 			if (g_self && g_self->hooks->UI && g_closerWidget)
 				g_self->hooks->UI->SetWidgetVisible(g_closerWidget, false);
 			if (g_restoreRender.exchange(false))
@@ -367,6 +375,10 @@ namespace CodexUI
 			g_detailVisible = false;
 			g_consumersItemName.clear();
 			g_detailLastFrame = -1000;
+			// The loader keeps a panel collapsed after a close; its own panel
+			// list would reopen it as a bare title bar.
+			if (g_self && g_self->hooks->UI)
+				g_self->hooks->UI->SetPanelCollapsed(handle, false);
 
 			ReleaseEscapeIfIdle();
 			ReleaseCaptureIfIdle();
@@ -374,16 +386,22 @@ namespace CodexUI
 
 		void OnEscapePressed(EModKey /*key*/, EModKeyEvent event)
 		{
+			if (!CodexFields::RecipeCodex.On())
+				return;
+
 			if (event != EModKeyEvent::Pressed)
 				return;
 			if (g_searchVisible)
 				CloseSearch();
-			else if (g_detailVisible)
+			else if (g_detailVisible && g_escapeCloses.load(std::memory_order_relaxed))
 				CloseDetail();
 		}
 
 		void OnSearchKeyPressed(EModKey /*key*/, EModKeyEvent event)
 		{
+			if (!CodexFields::RecipeCodex.On())
+				return;
+
 			if (event != EModKeyEvent::Pressed)
 				return;
 			if (g_searchVisible)
@@ -404,6 +422,9 @@ namespace CodexUI
 		// on the same key (N), so this never also opens the search box.
 		void OnCodexKeyPressed(EModKey /*key*/, EModKeyEvent event)
 		{
+			if (!CodexFields::RecipeCodex.On())
+				return;
+
 			if (event != EModKeyEvent::Pressed)
 				return;
 
@@ -781,6 +802,9 @@ namespace CodexUI
 
 		void RenderSearchWidget(IModLoaderImGui* imgui)
 		{
+			if (!CodexFields::RecipeCodex.On())
+				return;
+
 			const float fontScale = (std::max)(1.0f, imgui->GetFontSize() / kBaselineFontSize);
 			g_searchHints.width = kSearchBoxBaseWidth * fontScale;
 
@@ -1273,7 +1297,8 @@ namespace CodexUI
 			imgui->EndChild();
 		}
 
-		void RenderDetailWidget(IModLoaderImGui* imgui)
+		// Runs on every frame the Codex window is drawn, collapsed or not.
+		void TrackDetailPanel(IModLoaderImGui* imgui)
 		{
 			// Opened from the mod loader's own panel list rather than via
 			// OpenDetail - adopt it so Escape and our state track it too.
@@ -1286,6 +1311,14 @@ namespace CodexUI
 					g_requestedTab = DetailTab::Buildings;
 			}
 			g_detailLastFrame = imgui->GetFrameCount();
+		}
+
+		void RenderDetailWidget(IModLoaderImGui* imgui)
+		{
+			if (!CodexFields::RecipeCodex.On())
+				return;
+
+			TrackDetailPanel(imgui);
 
 			// Opens the search box over this window; picking a result then
 			// navigates here instead of opening a new window.
@@ -1694,6 +1727,13 @@ namespace CodexUI
 		{
 			if (!section || !key || !newValue || strcmp(section, "Menu") != 0)
 				return;
+
+			if (strcmp(key, "EscapeCloses") == 0)
+			{
+				g_escapeCloses.store(_stricmp(newValue, "true") == 0 || strcmp(newValue, "1") == 0,
+					std::memory_order_relaxed);
+				return;
+			}
 
 			// A cleared or hand-edited search box spot: re-place an open box.
 			const bool searchX = strcmp(key, "SearchBoxX") == 0;
@@ -2804,6 +2844,24 @@ namespace CodexUI
 			imgui->DL_AddText(dl, cx - iconW * 0.5f, cy - size * 0.5f, imgui->GetColorU32FromCol(kColText, 1.0f), icon);
 		}
 
+		// The Codex window's collapse button, on the title bar the loader draws.
+		// A collapsed window stays open: Escape and the Codex key still close it.
+		void RenderDetailTitleBar(IModLoaderImGui* imgui)
+		{
+			if (!CodexFields::RecipeCodex.On() || !g_self || !g_self->hooks->UI)
+				return;
+
+			TrackDetailPanel(imgui);
+
+			const bool collapsed = g_self->hooks->UI->IsPanelCollapsed(g_detailPanel);
+			char label[32];
+			snprintf(label, sizeof(label), "%s###Codex_Collapse", collapsed ? kIconExpand : kIconCollapse);
+			imgui->SameLine(0.0f, -1.0f);
+			if (imgui->SmallButton(label))
+				g_self->hooks->UI->SetPanelCollapsed(g_detailPanel, !collapsed);
+			imgui->SetItemTooltip(collapsed ? "Expand" : "Collapse");
+		}
+
 		enum class TitleGlyph { Close, Collapse, Expand };
 
 		// One button of a pinned window's title bar: an item of its own, like
@@ -3034,6 +3092,9 @@ namespace CodexUI
 
 		void RenderPinSlot(int index, IModLoaderImGui* imgui)
 		{
+			if (!CodexFields::RecipeCodex.On())
+				return;
+
 			PinSlot& slot = g_pins[index];
 
 			// Restored under a saved tuck: measured and placed without being seen.
@@ -3223,6 +3284,9 @@ namespace CodexUI
 		// The arrow's window, put on the right edge of the top pin for the next frame.
 		void RenderPinLayerArrow(IModLoaderImGui* imgui)
 		{
+			if (!CodexFields::RecipeCodex.On())
+				return;
+
 			// With the pins tucked away their windows do not run the frame's setup.
 			if (g_tuckT > 0.0f)
 				AdvancePinClock(imgui);
@@ -3328,14 +3392,14 @@ namespace CodexUI
 
 		void UnregisterPinLayerArrow(IPluginSelf* self)
 		{
-			g_tuckT = 0.0f;
-			g_layerPlaceFrames = 0;
-			g_layerShown = false;
 			if (g_layerWidget)
 			{
 				self->hooks->UI->UnregisterWidget(g_layerWidget);
 				g_layerWidget = nullptr;
 			}
+			g_tuckT = 0.0f;
+			g_layerPlaceFrames = 0;
+			g_layerShown = false;
 		}
 
 		void RegisterPinSlots(IPluginSelf* self)
@@ -3367,13 +3431,31 @@ namespace CodexUI
 		{
 			for (PinSlot& slot : g_pins)
 			{
-				slot.nativeRecipe = nullptr;
-				slot.recipeKey.clear();
 				if (slot.widget)
-				{
 					self->hooks->UI->UnregisterWidget(slot.widget);
-					slot.widget = nullptr;
-				}
+			}
+		}
+
+		// Back to new slots, so nothing of an earlier pin shows when the codex
+		// comes back on. Only after every widget that reads g_pins is gone.
+		void ResetPinSlots()
+		{
+			for (PinSlot& slot : g_pins)
+				slot = PinSlot{};
+		}
+
+		void ResetSelectionState()
+		{
+			g_selectedNativeRecipe = nullptr;
+			g_selectedBuildingGroup.clear();
+			g_requestedTab = DetailTab::None;
+			g_requestedTier = 0;
+			g_restoreWaiting = false;
+			g_restoreRender = false;
+			g_closeRender = false;
+			{
+				std::lock_guard<std::mutex> lock(g_gamePinMutex);
+				g_gamePinItem.clear();
 			}
 		}
 	}
@@ -3413,6 +3495,7 @@ namespace CodexUI
 		g_detailDesc.buttonLabel = "Codex";
 		g_detailDesc.windowTitle = "Codex";
 		g_detailDesc.renderFn    = &RenderDetailWidget;
+		g_detailDesc.titleBarFn  = &RenderDetailTitleBar;
 		g_detailPanel = self->hooks->UI->RegisterPanel(&g_detailDesc);
 		self->hooks->UI->RegisterOnPanelWindowClosed(&OnDetailPanelClosed);
 
@@ -3439,6 +3522,7 @@ namespace CodexUI
 			self->hooks->UI->SetWidgetVisible(g_closerWidget, false);
 
 		CodexConfig::Config::GetSearchBoxPos(g_searchSavedX, g_searchSavedY);
+		g_escapeCloses.store(CodexConfig::Config::GetEscapeCloses(), std::memory_order_relaxed);
 		LoadPinSettings();
 		RegisterPinSlots(self);
 		RegisterPinLayerArrow(self);
@@ -3487,16 +3571,9 @@ namespace CodexUI
 
 	void Shutdown(IPluginSelf* self)
 	{
-		g_restoreWaiting = false;
-		g_restoreRender = false;
-		g_closeRender = false;
-		{
-			std::lock_guard<std::mutex> lock(g_gamePinMutex);
-			g_gamePinItem.clear();
-		}
-
 		if (!self->hooks->UI)
 		{
+			ResetSelectionState();
 			g_self = nullptr;
 			return;
 		}
@@ -3536,6 +3613,9 @@ namespace CodexUI
 			g_detailPanel = nullptr;
 		}
 
+		// Every widget and the panel are unregistered; nothing reads this state now.
+		ResetPinSlots();
+		ResetSelectionState();
 		g_self = nullptr;
 	}
 }

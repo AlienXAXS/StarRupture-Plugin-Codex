@@ -57,6 +57,7 @@ what it produces.
   built into the plugin. If they can't be resolved or don't fit the game's recipe data, the recipe
   codex turns off and logs one line. The rest of the mod keeps running.
 
+
 ---
 
 ## Features
@@ -67,6 +68,12 @@ what it produces.
   too). Close with `Esc`. The box opens centred; drag it anywhere and it opens there next time.
 - **Full Codex window** -- press `Shift+N` (configurable) to open the Codex straight to the
   last recipe you viewed, or the building browser if you haven't picked one yet.
+- **Collapse the Codex window** <sup>[✦](#msantoro12)</sup> -- the button on its title bar shrinks it to the title bar and
+  opens it again. `Esc` and the Codex key still close it while it is collapsed.
+- **Stop `Esc` closing the Codex window** <sup>[✦](#msantoro12)</sup> -- turn `EscapeCloses` off
+  and close the window with the Codex key or its X. While the window is open during gameplay,
+  `Esc` still does not reach the game; over screens with a cursor it does. `Esc` still closes
+  the search box.
 - **Recipe detail window** -- shows a recipe's inputs and outputs side by side, each with
   icon, name, count, and craft rate (items/min). Click an input to jump to the recipe that
   produces it; click an output to see every recipe that consumes it. Click a building under
@@ -157,6 +164,7 @@ keep working, and choices match ignoring case. The dropdowns and the hidden entr
 | `General` | `Enabled` | `true` | Enable or disable Codex |
 | `Menu` | `SearchKey` | `N` | Key to open the recipe search box |
 | `Menu` | `CodexKey` | `Shift+N` | Key to open (or close) the full Codex window |
+| `Menu` | `EscapeCloses` | `true` | Whether `Esc` closes the full Codex window. `Esc` always closes the search box |
 | `Menu` | `GamePinKey` | `RightMouseButton` | Key that pins the item in the game's open item tooltip (recipe station, delivery panel, machine menus) |
 | `Menu` | `GamePlannerKey` | `Ctrl+RightMouseButton` | Key that opens the planner for the item in the game's open item tooltip, the same page as the Planner button |
 | `Menu` | `PinLayout` | `Right` | Screen edge pinned recipes start from: `Right`, `Left` or `Top` (dropdown) |

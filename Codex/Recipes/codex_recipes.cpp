@@ -746,6 +746,12 @@ namespace CodexRecipes
 
 		void RefreshRecipesOnGameThread(void* /*context*/)
 		{
+			if (!CodexFields::RecipeCodex.On())
+			{
+				g_refreshInFlight.store(false, std::memory_order_release);
+				return;
+			}
+
 			std::vector<RecipeInfo>    recipes;
 			std::vector<BuildingGroup> groups;
 

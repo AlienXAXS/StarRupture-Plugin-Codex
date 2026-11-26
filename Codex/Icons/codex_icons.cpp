@@ -24,6 +24,12 @@ namespace CodexIcons
 			images->UseSets(self, PLUGIN_IMAGE_SET_ITEMS);
 	}
 
+	void Shutdown(IPluginSelf* self)
+	{
+		if (IPluginImages* images = ImageTable())
+			images->UseSets(self, 0);
+	}
+
 	void Draw(IModLoaderImGui* imgui, uint32_t itemImage, float iconSize)
 	{
 		if (!imgui)
