@@ -1,4 +1,4 @@
 - Codex now loads on every ModLoader that can run it
 - You can now install and update Codex from the mod loader's Browse list.
 - A new button on the Codex window's title bar collapses the window and opens it again.
-- New EscapeCloses option: turn it off to stop Esc closing the search box and the Codex window.
+- New EscapeCloses option: turn it off to stop Esc closing the Codex window. Esc still closes the search box.

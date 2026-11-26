@@ -35,7 +35,7 @@ namespace CodexConfig
 			"EscapeCloses",
 			ConfigValueType::Boolean,
 			"true",
-			"Whether Esc closes the search box and the full Codex window. When off, the Codex key or picking a result closes the search box"
+			"Whether Esc closes the full Codex window. Esc always closes the search box"
 		},
 		{
 			"Menu",
@@ -267,7 +267,7 @@ namespace CodexConfig
 			return "Shift+N";
 		}
 
-		// Whether Escape closes the search box and the full Codex window.
+		// Whether Escape closes the full Codex window; the search box always closes on it.
 		static bool GetEscapeCloses()
 		{
 			return s_self ? s_self->config->ReadBool(s_self, "Menu", "EscapeCloses", true) : true;

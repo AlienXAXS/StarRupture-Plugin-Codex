@@ -70,10 +70,8 @@ what it produces.
   last recipe you viewed, or the building browser if you haven't picked one yet.
 - **Collapse the Codex window** -- the button on its title bar shrinks it to the title bar and
   opens it again. `Esc` and the Codex key still close it while it is collapsed.
-- **Keep Esc for the game** -- turn `EscapeCloses` off and `Esc` no longer closes the search box
-  or the Codex window. Close the window with the Codex key or its X. The search box closes when
-  you pick a result, or when you press the Codex key after clicking outside the text field
-  (this opens the Codex window).
+- **Keep Esc for the game** -- turn `EscapeCloses` off and `Esc` no longer closes the Codex
+  window. Close it with the Codex key or its X. `Esc` still closes the search box.
 - **Recipe detail window** -- shows a recipe's inputs and outputs side by side, each with
   icon, name, count, and craft rate (items/min). Click an input to jump to the recipe that
   produces it; click an output to see every recipe that consumes it. Click a building under
@@ -163,7 +161,7 @@ keep working, and choices match ignoring case. The dropdowns and the hidden entr
 | `General` | `Enabled` | `true` | Enable or disable Codex |
 | `Menu` | `SearchKey` | `N` | Key to open the recipe search box |
 | `Menu` | `CodexKey` | `Shift+N` | Key to open (or close) the full Codex window |
-| `Menu` | `EscapeCloses` | `true` | Whether `Esc` closes the search box and the full Codex window |
+| `Menu` | `EscapeCloses` | `true` | Whether `Esc` closes the full Codex window. `Esc` always closes the search box |
 | `Menu` | `GamePinKey` | `RightMouseButton` | Key that pins the item in the game's open item tooltip (recipe station, delivery panel, machine menus) |
 | `Menu` | `GamePlannerKey` | `Ctrl+RightMouseButton` | Key that opens the planner for the item in the game's open item tooltip, the same page as the Planner button |
 | `Menu` | `PinLayout` | `Right` | Screen edge pinned recipes start from: `Right`, `Left` or `Top` (dropdown) |

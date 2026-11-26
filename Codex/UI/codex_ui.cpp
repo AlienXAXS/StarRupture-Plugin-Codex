@@ -384,11 +384,11 @@ namespace CodexUI
 			if (!CodexFields::RecipeCodex.On())
 				return;
 
-			if (event != EModKeyEvent::Pressed || !g_escapeCloses.load(std::memory_order_relaxed))
+			if (event != EModKeyEvent::Pressed)
 				return;
 			if (g_searchVisible)
 				CloseSearch();
-			else if (g_detailVisible)
+			else if (g_detailVisible && g_escapeCloses.load(std::memory_order_relaxed))
 				CloseDetail();
 		}
 
