@@ -682,7 +682,7 @@ namespace CodexTooltipPin
 			if (target.item.empty())
 				return;
 
-			LOG_INFO("CodexTooltipPin: pin asked for '%s' from the game's tooltip (skipped if a pin already makes it).", target.item.c_str());
+			LOG_INFO("CodexTooltipPin: pin asked for '%s' from the game's tooltip (refused, and logged, if a pin already makes it or every slot is in use).", target.item.c_str());
 			CodexUI::PinProductOf(target.item);
 		}
 

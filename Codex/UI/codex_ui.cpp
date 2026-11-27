@@ -165,17 +165,28 @@ namespace CodexUI
 		bool HasFreePinSlot();
 
 		// What a right-click pin of an item would do.
-		enum class PinAsk
+		enum class PinVerdict
 		{
 			Pin,           // a free slot takes the recipe
 			NoRecipe,      // nothing makes the item (a raw resource)
 			AlreadyPinned, // a pin already makes it
 			Full           // every pin slot is in use
 		};
-		PinAsk JudgePin(const std::string& uniqueItemName, void*& recipe);
+		PinVerdict JudgePin(const std::string& uniqueItemName, void*& recipe);
 		void RightClickPin(IModLoaderImGui* imgui, const std::string& uniqueItemName, void* recipe);
 
-		constexpr const char* kPinFullTip = "All pin slots are in use - unpin a recipe first.";
+
+		// Hover text for a pin that can't be made, nullptr otherwise. The Pin
+		// button and every right-click row share it.
+		const char* PinRefusedTip(PinVerdict verdict)
+		{
+			switch (verdict)
+			{
+			case PinVerdict::Full:          return "All pin slots are in use - unpin a recipe first.";
+			case PinVerdict::AlreadyPinned: return "Already pinned.";
+			default:                        return nullptr;
+			}
+		}
 		bool AnyPinned();
 		void UntuckNow();
 		int  PinCount();
@@ -500,17 +511,15 @@ namespace CodexUI
 		// the log say why.
 		void PinOnRightClick(IModLoaderImGui* imgui, const std::string& uniqueItemName, void* recipe = nullptr)
 		{
+			const bool clicked = imgui->IsItemClicked(1);
 			if (imgui->IsItemHovered())
 			{
 				void* target = recipe;
-				const PinAsk ask = JudgePin(uniqueItemName, target);
-				if (ask == PinAsk::Full)
-					imgui->SetItemTooltip(kPinFullTip);
-				else if (ask == PinAsk::AlreadyPinned)
-					imgui->SetItemTooltip("Already pinned.");
+				if (const char* tip = PinRefusedTip(JudgePin(uniqueItemName, target)))
+					imgui->SetItemTooltip(tip);
 			}
 
-			if (imgui->IsItemClicked(1))
+			if (clicked)
 				RightClickPin(imgui, uniqueItemName, recipe);
 		}
 
@@ -1595,7 +1604,7 @@ namespace CodexUI
 				PinRecipe(imgui, info.nativeRecipe);
 			imgui->EndDisabled();
 			if (!pinned && !canPin)
-				imgui->SetItemTooltip(kPinFullTip);
+				imgui->SetItemTooltip(PinRefusedTip(PinVerdict::Full));
 			else if (!pinned)
 				imgui->SetItemTooltip("Keep this recipe on screen while you play. Right-click an item to pin its recipe.");
 
@@ -1701,10 +1710,13 @@ namespace CodexUI
 					kItemSelectableFlags, 0.0f, TwoLineRowHeight(imgui, iconSize));
 				const bool rightClicked = imgui->IsItemClicked(1);
 				if (imgui->IsItemHovered())
-					imgui->SetTooltip(IsPinned(nativeRecipe)
-						? "Click to view (already pinned)"
-						: HasFreePinSlot() ? "Click to view, right-click to pin"
-						                   : "Click to view. All pin slots are in use - unpin a recipe first.");
+				{
+					void* target = nativeRecipe;
+					const char* refused = PinRefusedTip(JudgePin(recipe.output.uniqueItemName, target));
+					char tip[96];
+					snprintf(tip, sizeof(tip), "Click to view. %s", refused ? refused : "Right-click to pin.");
+					imgui->SetTooltip(tip);
+				}
 				imgui->SameLine(0.0f, 0.0f);
 
 				CodexIcons::Draw(imgui, recipe.output.itemImage, iconSize);
@@ -2337,23 +2349,23 @@ namespace CodexUI
 
 		// Judges a right-click pin of an item. `recipe` is the recipe to pin when the
 		// caller has one; otherwise it is set to the one that makes the item.
-		PinAsk JudgePin(const std::string& uniqueItemName, void*& recipe)
+		PinVerdict JudgePin(const std::string& uniqueItemName, void*& recipe)
 		{
 			if (recipe)
 			{
 				if (IsPinned(recipe))
-					return PinAsk::AlreadyPinned;
+					return PinVerdict::AlreadyPinned;
 			}
 			else
 			{
 				if (IsProductPinned(uniqueItemName))
-					return PinAsk::AlreadyPinned;
+					return PinVerdict::AlreadyPinned;
 				CodexRecipes::RecipeInfo producer;
 				if (!CodexRecipes::FindProducerOfItem(uniqueItemName, producer))
-					return PinAsk::NoRecipe;
+					return PinVerdict::NoRecipe;
 				recipe = producer.nativeRecipe;
 			}
-			return HasFreePinSlot() ? PinAsk::Pin : PinAsk::Full;
+			return HasFreePinSlot() ? PinVerdict::Pin : PinVerdict::Full;
 		}
 
 		// A right-click pin, from a row or the game's tooltip key. The pins come
@@ -2361,8 +2373,8 @@ namespace CodexUI
 		// and a refusal is logged once per click.
 		void RightClickPin(IModLoaderImGui* imgui, const std::string& uniqueItemName, void* recipe)
 		{
-			const PinAsk ask = JudgePin(uniqueItemName, recipe);
-			if (ask == PinAsk::NoRecipe)
+			const PinVerdict ask = JudgePin(uniqueItemName, recipe);
+			if (ask == PinVerdict::NoRecipe)
 			{
 				LOG_INFO("CodexUI: right-click pin of '%s' ignored: no recipe makes it.", uniqueItemName.c_str());
 				return;
@@ -2370,11 +2382,11 @@ namespace CodexUI
 
 			if (AnyPinned())
 				UntuckNow();
-			if (ask == PinAsk::Pin)
+			if (ask == PinVerdict::Pin)
 				PinRecipe(imgui, recipe);
 			else
 				LOG_INFO("CodexUI: right-click pin of '%s' refused: %s.", uniqueItemName.c_str(),
-					ask == PinAsk::Full ? "all pin slots are in use" : "already pinned");
+					ask == PinVerdict::Full ? "all pin slots are in use" : "already pinned");
 		}
 
 		bool HasFreePinSlot()
@@ -2601,7 +2613,8 @@ namespace CodexUI
 		}
 
 		// Brings tucked pins straight back out and drops the player's tuck, for the
-		// first pin after none, where a tuck would hide it, and for the last unpinned.
+		// first pin after none, where a tuck would hide it, for the last unpinned,
+		// and for a right-click pin, so its result or refusal is seen.
 		void UntuckNow()
 		{
 			CommitPinsTucked(false);

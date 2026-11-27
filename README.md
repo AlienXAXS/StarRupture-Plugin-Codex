@@ -41,7 +41,8 @@ what it produces.
   while the mouse cursor is showing. While you are placing a building it stays hidden. Tucked pins stay tucked
   after the menu closes and on every other screen, and across a restart or RELOAD: they stay
   out of the way in gameplay until you open a menu and click the arrow to expand them. A pin
-  you add while the pins are tucked is tucked with them. The first pin after none, and unpinning
+  you add with the Pin button while the pins are tucked is tucked with them; a right-click pin
+  brings the pins back out. The first pin after none, and unpinning
   the last one, start the pins out again.
 
 - **Icons come from the loader's image library** <sup>[✦](#msantoro12)</sup> -- item icons are
@@ -112,7 +113,8 @@ what it produces.
 - **Pin from the game's menus** -- in the recipe station, the company delivery panel or a
   machine's menu, hover an item until the game shows its tooltip, then right-click
   (`GamePinKey`) to pin the recipe that makes it. The new pin appears with the others. Only
-  the item in the open tooltip is pinned, so nothing happens without one. It does nothing on
+  the item in the open tooltip is pinned, so nothing happens without one. When all pin slots are
+  in use or the recipe is already pinned, the pins come out and the reason is only written to the log. It does nothing on
   an inventory slot's tooltip (your own inventory, or the one shown beside a machine), where
   right-click is the game's own action.
 - **Open in Planner from the game's menus** -- on the same tooltips, **Ctrl + right-click**
