@@ -744,6 +744,15 @@ namespace CodexRecipes
 			return name;
 		}
 
+		// Go to item's key for a building, or empty. Game thread.
+		std::string BuildingGoToKey(SDK::UCrBuildingData* building)
+		{
+			IPluginHooks* hooks = GetHooks();
+			const SDK::FName* name = hooks
+				? CodexFields::BuildingUniqueName.In(hooks->ObjectProperties, building) : nullptr;
+			return name && !name->IsNone() ? "building." + name->ToString() : std::string();
+		}
+
 		void RefreshRecipesOnGameThread(void* /*context*/)
 		{
 			if (!CodexFields::RecipeCodex.On())
@@ -778,6 +787,7 @@ namespace CodexRecipes
 					std::string key;
 					int         tier = 1;
 					std::string displayName;
+					std::string goToKey;
 					std::vector<SDK::UCrItemRecipeData*> recipes;
 				};
 				std::vector<ParsedBuilding> parsed;
@@ -792,6 +802,7 @@ namespace CodexRecipes
 						assetName = entry.building->GetName();
 						ParseBuildingAssetName(assetName, pb.key, pb.tier);
 						pb.displayName = GetBuildingDisplayName(entry.building);
+						pb.goToKey     = BuildingGoToKey(entry.building);
 						pb.recipes     = GatherRecipes(entry.collection, linked, assetName);
 					}
 					catch (...)
@@ -822,12 +833,16 @@ namespace CodexRecipes
 				// Keyed by display name too, so e.g. two different "Food
 				// Processor" assets end up as one entry in the browser.
 				std::map<std::string, std::map<int, std::vector<SDK::UCrItemRecipeData*>>> grouped;
+				std::map<std::string, std::multimap<int, std::string>> goToKeys; // groupName -> tier -> key
 				for (const ParsedBuilding& pb : parsed)
 				{
 					auto nameIt = tierOneNameByKey.find(pb.key);
 					const std::string groupName = nameIt != tierOneNameByKey.end()
 						? nameIt->second
 						: StripTierFromDisplayName(pb.displayName);
+
+					if (!pb.goToKey.empty() && pb.goToKey.size() < kBuildingGoToKeyChars)
+						goToKeys[groupName].emplace(pb.tier, pb.goToKey);
 
 					std::vector<SDK::UCrItemRecipeData*>& tierRecipes = grouped[groupName][pb.tier];
 					for (SDK::UCrItemRecipeData* recipe : pb.recipes)
@@ -846,6 +861,15 @@ namespace CodexRecipes
 						break;
 					BuildingGroup group;
 					group.displayName = groupName;
+
+					int keyCount = 0;
+					for (const auto& [tier, key] : goToKeys[groupName])
+					{
+						const bool listed = std::any_of(group.goToKeys, group.goToKeys + keyCount,
+							[&key](const char* other) { return key == other; });
+						if (!listed && keyCount < kBuildingGoToKeys)
+							strcpy_s(group.goToKeys[keyCount++], key.c_str());
+					}
 
 					for (auto& [tier, tierRecipes] : tiers)
 					{

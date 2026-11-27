@@ -90,6 +90,11 @@ namespace CodexFields
 	inline PluginLazyField<SDK::UUserWidget*> PromptExpandAction{ "ExpandAction" };     // WBP_TooltipPrompt_C: its "Expand" row
 	inline PluginLazyField<SDK::FDataTableRowHandle> TooltipExpandHandle{ "ExpandHandle" }; // WBP_ToolTipWidget_C: the input action the "Expand" row shows
 
+	// UCrBuildingData's unique name (the game's spelling), which the search
+	// results' building checkboxes hand to Go to item. Found by name too, so a
+	// miss only leaves buildings without a checkbox.
+	inline PluginLazyField<SDK::FName> BuildingUniqueName{ "BuldingUniqueName" };
+
 	// The SDK's helpers, under the names the plugin uses.
 	using PluginMap::KeysOf;
 	using PluginMap::ValueOr;

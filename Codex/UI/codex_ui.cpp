@@ -4,6 +4,7 @@
 #include "Planner/codex_planner.h"
 #include "Icons/codex_icons.h"
 #include "plugin_images.h"
+#include "plugin_go_to_item.h"
 #include "Plugin Core/Helpers/plugin_helpers.h"
 #include "Plugin Core/Config/plugin_config.h"
 #include "Plugin Core/codex_fields.h"
@@ -799,6 +800,499 @@ namespace CodexUI
 				imgui->SetMouseCursor(kMouseCursorResizeAll);
 		}
 
+		// ImGuiStyleVar_Alpha, for dimming one widget, and
+		// ImGuiStyleVar_FramePadding, for a checkbox as tall as a line of text.
+		constexpr int kStyleVarAlpha = 0;
+		constexpr int kStyleVarFramePadding = 11;
+
+		// The Go button and the search results' checkboxes track an item or a
+		// building in the Go to item plugin, which marks where it is. That
+		// plugin's API is game thread only, so the UI says what it shows and
+		// queues clicks, and the tick answers with what to draw. g_goMutex guards
+		// g_go and g_searchTrack.
+		struct TrackState
+		{
+			char itemKey[GOTOITEM_KEY_CHARS]; // the key a click on this answer tracks
+			char rowKey[GOTOITEM_KEY_CHARS];  // the search row's first key
+			bool show;
+			bool tracked;
+			bool dim;          // no source is known yet; the item can still be tracked
+			char problem[160]; // why the last click failed, or why it is dim
+		};
+
+		enum class TrackClick { None, Track, Untrack };
+
+		struct GoButton
+		{
+			char       wanted[GOTOITEM_KEY_CHARS]; // the item the recipe tab shows
+			TrackClick click;                      // queued for `wanted`
+			int        idleTicks;                  // ticks since the tab last drew
+			TrackState state;
+		};
+
+		constexpr int kMaxRecipeResults = 10;
+		constexpr int kMaxBuildingResults = 3;
+		constexpr int kMaxSearchRows = kMaxRecipeResults + kMaxBuildingResults;
+
+		static_assert(CodexRecipes::kBuildingGoToKeyChars == GOTOITEM_KEY_CHARS, "a building key fits Go to item's");
+
+		// What a search row can track. An item row has one key; a building row
+		// has one for each of its buildings.
+		struct SearchRow
+		{
+			uint32_t kind; // GOTO_KIND_ITEM or GOTO_KIND_MAP
+			char     keys[CodexRecipes::kBuildingGoToKeys][GOTOITEM_KEY_CHARS];
+		};
+
+		// One checkbox per row of the search results.
+		struct SearchTrack
+		{
+			SearchRow  wanted[kMaxSearchRows];                        // by row
+			TrackClick clicks[kMaxSearchRows];                        // by row
+			char       clickKeys[kMaxSearchRows][GOTOITEM_KEY_CHARS]; // what each click is for
+			TrackState states[kMaxSearchRows]; // found by row key, not by row
+			int        count;     // rows shown; 0 while there are none
+			int        idleTicks; // ticks since the results last drew
+			bool       dirty;     // rows or clicks changed since the last query
+			bool       pluginOn;  // rows keep room for a checkbox
+		};
+
+		std::mutex  g_goMutex;
+		GoButton    g_go{};
+		SearchTrack g_searchTrack{};
+
+		// The recipe tab and the search results count as closed after this many
+		// ticks without a draw. More than one, as frames and ticks do not run in
+		// step.
+		constexpr int kGoIdleTicks = 30;
+
+		// The search rows are asked about again this often when nothing else
+		// changed: a source can become known without the change counter moving.
+		constexpr int kSearchTrackRefreshTicks = 15;
+
+		// The last click that failed, and why. It holds until the plugin's
+		// change counter moves. The button and the search results each have their
+		// own (game thread only).
+		struct GoFailure
+		{
+			char     key[GOTOITEM_KEY_CHARS];
+			int32_t  result;
+			uint32_t changes;
+		};
+
+		GoFailure g_goFailure{};
+		GoFailure g_searchFailure{};
+
+		// A building's known locations are asked for about once a second: each
+		// ask keeps Go to item's map scan running for a few seconds, so the first
+		// answer can still be empty (game thread only).
+		constexpr ULONGLONG kBuildingProbeMs = 1000;
+		// No location is asked for once the results have not drawn for this long.
+		constexpr int kBuildingProbeIdleTicks = 3;
+
+		struct BuildingProbe
+		{
+			char      key[GOTOITEM_KEY_CHARS];
+			ULONGLONG askedAt;
+			bool      hasSource;
+		};
+
+		BuildingProbe g_buildingProbes[kMaxBuildingResults * CodexRecipes::kBuildingGoToKeys]{};
+
+		// When the search rows were last asked about (game thread only).
+		uint32_t g_searchTrackChanges = 0;
+		int      g_searchTrackAge = 0;
+
+		void ResetGoToItem()
+		{
+			std::lock_guard<std::mutex> lock(g_goMutex);
+			g_go = {};
+			g_searchTrack = {};
+			g_goFailure = {};
+			g_searchFailure = {};
+			for (BuildingProbe& probe : g_buildingProbes)
+				probe = {};
+		}
+
+		// A key too long for the plugin is not one of its items.
+		bool IsGoToItemKey(const std::string& key)
+		{
+			return !key.empty() && key.size() < GOTOITEM_KEY_CHARS;
+		}
+
+		void ExpireFailure(const GoToItemApi& api, GoFailure& failure)
+		{
+			if (failure.result < 0 && api.GetChangeCounter() != failure.changes)
+				failure.result = 0;
+		}
+
+		void RecordClick(const GoToItemApi& api, const char* key, int32_t result, GoFailure& failure)
+		{
+			failure.result = result < 0 ? result : 0;
+			failure.changes = api.GetChangeCounter();
+			strcpy_s(failure.key, key);
+		}
+
+		// Why the last click on this answer's key failed, if it did.
+		void CopyFailure(const GoToItemApi& api, const GoFailure& failure, TrackState& state)
+		{
+			if (failure.result < 0 && strcmp(failure.key, state.itemKey) == 0)
+				strncpy_s(state.problem, api.ResultToString(failure.result), _TRUNCATE);
+		}
+
+		// Game thread. Asks the plugin about one item and applies a click. The
+		// table and its text are only good for this call: a RELOAD can unload the
+		// plugin, so the text is copied.
+		TrackState QueryTrack(const GoToItemApi& api, const char* key, TrackClick click, GoFailure& failure)
+		{
+			TrackState state{};
+			strcpy_s(state.itemKey, key);
+			strcpy_s(state.rowKey, key);
+
+			ExpireFailure(api, failure);
+
+			// A tracked item is always offered, so it can be untracked.
+			const int32_t canTrack = api.CanTrack(key);
+			const bool offered = canTrack == GOTO_OK || canTrack == GOTO_NO_LOCATION_YET;
+			if (!offered && api.IsTracked(key) != 1)
+				return state;
+
+			if (click != TrackClick::None)
+			{
+				const int32_t result = click == TrackClick::Track ? api.TrackItem(key) : api.UntrackItem(key);
+				RecordClick(api, key, result, failure);
+			}
+
+			state.tracked = api.IsTracked(key) == 1;
+			state.show = offered || state.tracked;
+			state.dim = !state.tracked && canTrack != GOTO_OK;
+
+			CopyFailure(api, failure, state);
+			if (!state.problem[0] && state.dim)
+				strncpy_s(state.problem, api.ResultToString(canTrack), _TRUNCATE);
+			return state;
+		}
+
+		// Whether Go to item knows where a building is. Asks at most every
+		// kBuildingProbeMs per key, and only while `mayAsk`.
+		bool HasKnownSource(const GoToItemApi& api, const char* key, bool mayAsk)
+		{
+			// The key's own slot, or else the one asked about longest ago.
+			BuildingProbe* probe = &g_buildingProbes[0];
+			for (BuildingProbe& other : g_buildingProbes)
+			{
+				if (strcmp(other.key, key) == 0)
+				{
+					probe = &other;
+					break;
+				}
+				if (other.askedAt < probe->askedAt)
+					probe = &other;
+			}
+
+			const bool known = strcmp(probe->key, key) == 0;
+			const ULONGLONG now = GetTickCount64();
+			if (!mayAsk || (known && now - probe->askedAt < kBuildingProbeMs))
+				return known && probe->hasSource;
+
+			GoToSource source{};
+			uint32_t count = 0;
+			const int32_t result = api.ListTargetSources(GOTO_KIND_MAP, key, &source, sizeof(source), 1, &count);
+			strcpy_s(probe->key, key);
+			probe->askedAt = now;
+			probe->hasSource = result == GOTO_OK && count > 0;
+			return probe->hasSource;
+		}
+
+		// Game thread. A building row's answer: a tracked building of the group,
+		// so it can be unticked, or else the first one with a known location.
+		TrackState QueryBuildingTrack(const GoToItemApi& api, const SearchRow& row, bool mayAsk)
+		{
+			TrackState state{};
+			strcpy_s(state.rowKey, row.keys[0]);
+			// ListTargetSources is the last of the target calls used here, so a
+			// table that has it has the others too.
+			if (!GOTOITEM_HAS(&api, ListTargetSources))
+				return state;
+
+			ExpireFailure(api, g_searchFailure);
+
+			const char* offered = nullptr;
+			for (const char* key : row.keys)
+			{
+				if (!key[0])
+					break;
+				if (api.IsTrackedTarget(GOTO_KIND_MAP, key) == 1)
+				{
+					offered = key;
+					state.tracked = true;
+					break;
+				}
+				if (!offered && HasKnownSource(api, key, mayAsk))
+					offered = key;
+			}
+			if (!offered)
+				return state;
+
+			strcpy_s(state.itemKey, offered);
+			state.show = true;
+			CopyFailure(api, g_searchFailure, state);
+			return state;
+		}
+
+		// Game thread. A click on a building row's checkbox. Unticking stops
+		// every tracked building of the row, or the box would tick itself again.
+		void ClickBuildingTrack(const GoToItemApi& api, const SearchRow& row, const char* key, TrackClick click)
+		{
+			if (!GOTOITEM_HAS(&api, ListTargetSources))
+				return;
+			if (click == TrackClick::Track)
+			{
+				RecordClick(api, key, api.TrackTarget(GOTO_KIND_MAP, key), g_searchFailure);
+				return;
+			}
+			// The first failure is the one to report: its key is the first still
+			// tracked, which is the one the row then answers with.
+			const char* failedKey = key;
+			int32_t result = GOTO_OK;
+			for (const char* other : row.keys)
+			{
+				if (!other[0])
+					break;
+				if (api.IsTrackedTarget(GOTO_KIND_MAP, other) != 1)
+					continue;
+				const int32_t untracked = api.UntrackTarget(GOTO_KIND_MAP, other);
+				if (untracked < 0 && result >= 0)
+				{
+					failedKey = other;
+					result = untracked;
+				}
+			}
+			RecordClick(api, failedKey, result, g_searchFailure);
+		}
+
+		// Game thread. Does nothing while the recipe tab is not being drawn.
+		void TickGoButton()
+		{
+			char key[GOTOITEM_KEY_CHARS];
+			TrackClick click;
+			{
+				std::lock_guard<std::mutex> lock(g_goMutex);
+				if (!g_go.wanted[0])
+					return;
+				if (++g_go.idleTicks > kGoIdleTicks)
+				{
+					g_go = {};
+					g_goFailure = {};
+					return;
+				}
+				strcpy_s(key, g_go.wanted);
+				click = g_go.click;
+				g_go.click = TrackClick::None;
+			}
+
+			TrackState state{};
+			if (const GoToItemApi* api = GoToItem::GetIfOn())
+				state = QueryTrack(*api, key, click, g_goFailure);
+			else
+				g_goFailure = {};
+
+			std::lock_guard<std::mutex> lock(g_goMutex);
+			g_go.state = state;
+		}
+
+		// Game thread. Does nothing while the search results are not being drawn.
+		// At most kMaxSearchRows rows are asked about, and only when the rows
+		// changed, after a click, when the change counter moves, or every
+		// kSearchTrackRefreshTicks.
+		void TickSearchTrack()
+		{
+			SearchRow rows[kMaxSearchRows];
+			TrackClick clicks[kMaxSearchRows];
+			char clickKeys[kMaxSearchRows][GOTOITEM_KEY_CHARS];
+			int count;
+			bool dirty;
+			bool wasOn;
+			bool mayAsk;
+			{
+				std::lock_guard<std::mutex> lock(g_goMutex);
+				if (g_searchTrack.count == 0)
+					return;
+				if (++g_searchTrack.idleTicks > kGoIdleTicks)
+				{
+					g_searchTrack = {};
+					g_searchFailure = {};
+					return;
+				}
+				count = g_searchTrack.count;
+				dirty = g_searchTrack.dirty;
+				wasOn = g_searchTrack.pluginOn;
+				mayAsk = g_searchTrack.idleTicks <= kBuildingProbeIdleTicks;
+				g_searchTrack.dirty = false;
+				memcpy(rows, g_searchTrack.wanted, sizeof(rows));
+				memcpy(clicks, g_searchTrack.clicks, sizeof(clicks));
+				memcpy(clickKeys, g_searchTrack.clickKeys, sizeof(clickKeys));
+				for (TrackClick& click : g_searchTrack.clicks)
+					click = TrackClick::None;
+			}
+
+			const GoToItemApi* api = GoToItem::GetIfOn();
+			if (!api)
+			{
+				g_searchFailure = {};
+				for (BuildingProbe& probe : g_buildingProbes)
+					probe = {};
+				std::lock_guard<std::mutex> lock(g_goMutex);
+				g_searchTrack.pluginOn = false;
+				for (TrackState& state : g_searchTrack.states)
+					state = {};
+				return;
+			}
+
+			if (wasOn && !dirty && api->GetChangeCounter() == g_searchTrackChanges &&
+				++g_searchTrackAge < kSearchTrackRefreshTicks)
+				return;
+			g_searchTrackAge = 0;
+
+			// Clicks go first, so every row's answer includes them.
+			for (int row = 0; row < count; ++row)
+			{
+				if (clicks[row] == TrackClick::None)
+					continue;
+				if (rows[row].kind == GOTO_KIND_MAP)
+					ClickBuildingTrack(*api, rows[row], clickKeys[row], clicks[row]);
+				else
+					QueryTrack(*api, clickKeys[row], clicks[row], g_searchFailure);
+			}
+
+			TrackState states[kMaxSearchRows]{};
+			for (int row = 0; row < count; ++row)
+			{
+				if (!rows[row].keys[0][0])
+					continue;
+				states[row] = rows[row].kind == GOTO_KIND_MAP
+					? QueryBuildingTrack(*api, rows[row], mayAsk)
+					: QueryTrack(*api, rows[row].keys[0], TrackClick::None, g_searchFailure);
+			}
+			g_searchTrackChanges = api->GetChangeCounter();
+
+			std::lock_guard<std::mutex> lock(g_goMutex);
+			g_searchTrack.pluginOn = true;
+			memcpy(g_searchTrack.states, states, sizeof(states));
+		}
+
+		// What the search results draw this frame.
+		struct SearchTrackView
+		{
+			bool       pluginOn;
+			TrackState rows[kMaxSearchRows];
+		};
+
+		// Render thread. Says which rows are shown, recipes first, and takes what
+		// the tick last answered for them.
+		SearchTrackView PublishSearchRows(const std::vector<const CodexRecipes::RecipeInfo*>& recipes,
+			const std::vector<const CodexRecipes::BuildingGroup*>& buildings)
+		{
+			SearchTrackView view{};
+			std::lock_guard<std::mutex> lock(g_goMutex);
+			const int recipeCount = (std::min)(static_cast<int>(recipes.size()), kMaxRecipeResults);
+			const int count = recipeCount +
+				(std::min)(static_cast<int>(buildings.size()), kMaxBuildingResults);
+			if (count != g_searchTrack.count)
+				g_searchTrack.dirty = true;
+			g_searchTrack.count = count;
+			g_searchTrack.idleTicks = 0;
+			view.pluginOn = g_searchTrack.pluginOn;
+
+			for (int row = 0; row < count; ++row)
+			{
+				SearchRow wanted{};
+				if (row < recipeCount)
+				{
+					wanted.kind = GOTO_KIND_ITEM;
+					const std::string& item = recipes[row]->output.uniqueItemName;
+					if (IsGoToItemKey(item))
+						strcpy_s(wanted.keys[0], item.c_str());
+				}
+				else
+				{
+					wanted.kind = GOTO_KIND_MAP;
+					static_assert(sizeof(wanted.keys) == sizeof(CodexRecipes::BuildingGroup::goToKeys), "same keys");
+					memcpy(wanted.keys, buildings[row - recipeCount]->goToKeys, sizeof(wanted.keys));
+				}
+
+				if (memcmp(&g_searchTrack.wanted[row], &wanted, sizeof(wanted)) != 0)
+				{
+					g_searchTrack.wanted[row] = wanted;
+					g_searchTrack.clicks[row] = TrackClick::None;
+					g_searchTrack.dirty = true;
+				}
+				if (!wanted.keys[0][0])
+					continue;
+				for (const TrackState& state : g_searchTrack.states)
+				{
+					if (strcmp(state.rowKey, wanted.keys[0]) == 0)
+					{
+						view.rows[row] = state;
+						break;
+					}
+				}
+			}
+			return view;
+		}
+
+		// Render thread. A result row's checkbox, or the same room left empty so
+		// the names stay in line. Draws nothing without the plugin.
+		void RenderSearchTrackBox(IModLoaderImGui* imgui, const SearchTrackView& view, int row, bool building)
+		{
+			if (!view.pluginOn)
+				return;
+
+			imgui->PushStyleVarVec2(kStyleVarFramePadding, 0.0f, 0.0f);
+			if (view.rows[row].show)
+			{
+				const TrackState& state = view.rows[row];
+				bool tracked = state.tracked;
+				if (state.dim)
+					imgui->PushStyleVarFloat(kStyleVarAlpha, 0.6f);
+				const bool clicked = imgui->Checkbox("##track", &tracked);
+				if (state.dim)
+					imgui->PopStyleVar(1);
+
+				const char* tooltip = state.problem;
+				if (!tooltip[0])
+					tooltip = state.tracked
+						? "Tracked in Go to item. Untick to stop tracking."
+						: building
+							? "Track this building to show where it is."
+							: "Track this item to show where it is produced.";
+				imgui->SetItemTooltip(tooltip);
+
+				if (clicked)
+				{
+					{
+						std::lock_guard<std::mutex> lock(g_goMutex);
+						if (strcmp(g_searchTrack.wanted[row].keys[0], state.rowKey) == 0)
+						{
+							g_searchTrack.clicks[row] = tracked ? TrackClick::Track : TrackClick::Untrack;
+							strcpy_s(g_searchTrack.clickKeys[row], state.itemKey);
+							g_searchTrack.dirty = true;
+						}
+					}
+					// The click took focus off the field; give it back so
+					// typing, the arrow keys and Enter keep working.
+					g_justOpenedSearch = true;
+				}
+			}
+			else
+			{
+				const float side = imgui->GetFrameHeight();
+				imgui->Dummy(side, side);
+			}
+			imgui->PopStyleVar(1);
+			imgui->SameLine(0.0f, -1.0f);
+		}
+
 		void RenderSearchWidget(IModLoaderImGui* imgui)
 		{
 			if (!CodexFields::RecipeCodex.On())
@@ -872,7 +1366,11 @@ namespace CodexUI
 			// the search and jump to the highlighted result instead. So
 			// ignore a deactivation caused by a mouse press and let the
 			// row's own click handle it.
-			const bool deactivated = imgui->IsItemDeactivatedAfterEdit();
+			// Giving the field its focus back (after a checkbox or a drag) makes
+			// ImGui forget the earlier edit, so an Enter that ends the field
+			// counts as a submit too.
+			const bool deactivated = imgui->IsItemDeactivatedAfterEdit() ||
+				(imgui->IsItemDeactivated() && imgui->IsKeyPressed(VK_RETURN, false));
 			const bool mousePressed = imgui->IsMouseClicked(0, false) || imgui->IsMouseClicked(1, false);
 			const bool submitted = deactivated && !mousePressed;
 
@@ -909,13 +1407,10 @@ namespace CodexUI
 				return;
 			std::vector<CodexRecipes::BuildingGroup> groups = CodexRecipes::GetBuildingGroups();
 
-			constexpr size_t kMaxResults = 10;
-			constexpr size_t kMaxBuildingResults = 3;
-
 			std::vector<const CodexRecipes::RecipeInfo*> recipes;
 			for (const CodexRecipes::RecipeInfo& recipe : all)
 			{
-				if (recipes.size() >= kMaxResults)
+				if (recipes.size() >= kMaxRecipeResults)
 					break;
 				if (ToLower(recipe.displayName).find(term) != std::string::npos)
 					recipes.push_back(&recipe);
@@ -938,6 +1433,7 @@ namespace CodexUI
 
 			imgui->Separator();
 
+			const SearchTrackView track = PublishSearchRows(recipes, buildings);
 			const float iconSize = OneLineIconSize(imgui);
 			int row = 0;
 			for (const CodexRecipes::RecipeInfo* recipe : recipes)
@@ -947,6 +1443,7 @@ namespace CodexUI
 				PinOnRightClick(imgui, recipe->output.uniqueItemName, recipe->nativeRecipe);
 				SyncSearchHighlight(imgui, row, mouseMoved, arrowSteps != 0);
 				imgui->SameLine(0.0f, 0.0f);
+				RenderSearchTrackBox(imgui, track, row, false);
 				RenderRecipeLabel(imgui, *recipe, iconSize);
 
 				// Tiered recipes share a name - the building tells them apart.
@@ -974,6 +1471,7 @@ namespace CodexUI
 				bool clicked = imgui->SelectableFull("##building_row", row == g_searchHighlight, kSelectableFlags, 0.0f, OneLineRowHeight(imgui, iconSize));
 				SyncSearchHighlight(imgui, row, mouseMoved, arrowSteps != 0);
 				imgui->SameLine(0.0f, 0.0f);
+				RenderSearchTrackBox(imgui, track, row, true);
 				imgui->Text(group->displayName.c_str());
 				imgui->SameLine(0.0f, 10.0f);
 				imgui->TextDisabled("Building");
@@ -1017,6 +1515,52 @@ namespace CodexUI
 			imgui->SetItemTooltip("Open a production planner for this item in your browser.");
 		}
 
+		// Render thread. Draws what the last tick answered for this item, which
+		// is nothing without the plugin. Like Pin, the button reads "Tracked" and
+		// is disabled once the item is tracked.
+		void RenderGoToItemButton(IModLoaderImGui* imgui, const std::string& uniqueItemName)
+		{
+			if (!IsGoToItemKey(uniqueItemName))
+				return;
+
+			const char* key = uniqueItemName.c_str();
+			TrackState state;
+			{
+				std::lock_guard<std::mutex> lock(g_goMutex);
+				if (strcmp(g_go.wanted, key) != 0)
+				{
+					strcpy_s(g_go.wanted, key);
+					g_go.click = TrackClick::None;
+				}
+				g_go.idleTicks = 0;
+				state = g_go.state;
+			}
+			if (!state.show || strcmp(state.itemKey, key) != 0)
+				return;
+
+			imgui->SameLine(0.0f, -1.0f);
+			imgui->BeginDisabled(state.tracked);
+			if (state.dim)
+				imgui->PushStyleVarFloat(kStyleVarAlpha, 0.6f);
+			const bool clicked = imgui->SmallButton(state.tracked ? "Tracked" : "Go");
+			if (state.dim)
+				imgui->PopStyleVar(1);
+			imgui->EndDisabled();
+
+			const char* tooltip = "Show where this item is produced.";
+			if (state.problem[0])
+				tooltip = state.problem;
+			else if (state.tracked)
+				tooltip = "Already tracked in Go to item.";
+			imgui->SetItemTooltip(tooltip);
+
+			if (clicked)
+			{
+				std::lock_guard<std::mutex> lock(g_goMutex);
+				g_go.click = TrackClick::Track;
+			}
+		}
+
 		void RenderRecipeTab(IModLoaderImGui* imgui)
 		{
 			CodexRecipes::RecipeInfo info;
@@ -1039,6 +1583,7 @@ namespace CodexUI
 
 			imgui->SameLine(0.0f, -1.0f);
 			RenderLaunchPlannerButton(imgui, info);
+			RenderGoToItemButton(imgui, info.output.uniqueItemName);
 
 			imgui->SameLine(0.0f, 12.0f);
 			imgui->SeparatorText(info.displayName.c_str());
@@ -2747,7 +3292,6 @@ namespace CodexUI
 		constexpr int kColText          = 0;
 		constexpr int kColWindowBg      = 2;
 		constexpr int kColBorder        = 5;
-		constexpr int kStyleVarAlpha    = 0; // ImGuiStyleVar_Alpha
 		constexpr int kColButtonHovered = 22;
 		constexpr int kColButtonActive  = 23;
 
@@ -3398,6 +3942,7 @@ namespace CodexUI
 			g_restoreWaiting = false;
 			g_restoreRender = false;
 			g_closeRender = false;
+			ResetGoToItem();
 			{
 				std::lock_guard<std::mutex> lock(g_gamePinMutex);
 				g_gamePinItem.clear();
@@ -3491,6 +4036,9 @@ namespace CodexUI
 
 	void Tick()
 	{
+		TickGoButton();
+		TickSearchTrack();
+
 		if (!g_restoreWaiting || !CodexRecipes::IsReady())
 			return;
 
