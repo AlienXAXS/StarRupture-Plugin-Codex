@@ -62,11 +62,19 @@ namespace CodexRecipes
 		std::vector<void*> recipes;     // RecipeInfo::nativeRecipe keys
 	};
 
+	// How many of a group's buildings Go to item is asked about, and the room
+	// for one of its keys. Fixed arrays, so copying a group allocates no more.
+	constexpr int kBuildingGoToKeys = 4;
+	constexpr int kBuildingGoToKeyChars = 96;
+
 	// Every tier of one building, e.g. "Fabricator" -> { Tier 1, Tier 2 }.
 	struct BuildingGroup
 	{
 		std::string               displayName;
 		std::vector<BuildingTier> tiers; // ascending by tier
+		// Go to item's keys for the group's buildings, lowest tier first; the
+		// unused ones are empty.
+		char goToKeys[kBuildingGoToKeys][kBuildingGoToKeyChars] = {};
 	};
 
 	void Init(IPluginSelf* self);
