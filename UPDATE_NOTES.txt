@@ -3,3 +3,4 @@
 - A new button on the Codex window's title bar collapses the window and opens it again.
 - New EscapeCloses option: turn it off to stop Esc closing the Codex window. Esc still closes the search box.
 - New Go button on the recipe tab that shows where the recipe's item is produced; it only shows when the Go to item plugin is installed and on (not released yet)
+- Tick a box in the search menu to track an item or building with Go to item, and untick it to stop (needs the Go to item plugin)
