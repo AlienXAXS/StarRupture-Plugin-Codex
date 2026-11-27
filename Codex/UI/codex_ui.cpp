@@ -1040,14 +1040,35 @@ namespace CodexUI
 			return state;
 		}
 
-		// Game thread. A click on a building row's checkbox.
-		void ClickBuildingTrack(const GoToItemApi& api, const char* key, TrackClick click)
+		// Game thread. A click on a building row's checkbox. Unticking stops
+		// every tracked building of the row, or the box would tick itself again.
+		void ClickBuildingTrack(const GoToItemApi& api, const SearchRow& row, const char* key, TrackClick click)
 		{
 			if (!GOTOITEM_HAS(&api, ListTargetSources))
 				return;
-			const int32_t result = click == TrackClick::Track
-				? api.TrackTarget(GOTO_KIND_MAP, key) : api.UntrackTarget(GOTO_KIND_MAP, key);
-			RecordClick(api, key, result, g_searchFailure);
+			if (click == TrackClick::Track)
+			{
+				RecordClick(api, key, api.TrackTarget(GOTO_KIND_MAP, key), g_searchFailure);
+				return;
+			}
+			// The first failure is the one to report: its key is the first still
+			// tracked, which is the one the row then answers with.
+			const char* failedKey = key;
+			int32_t result = GOTO_OK;
+			for (const char* other : row.keys)
+			{
+				if (!other[0])
+					break;
+				if (api.IsTrackedTarget(GOTO_KIND_MAP, other) != 1)
+					continue;
+				const int32_t untracked = api.UntrackTarget(GOTO_KIND_MAP, other);
+				if (untracked < 0 && result >= 0)
+				{
+					failedKey = other;
+					result = untracked;
+				}
+			}
+			RecordClick(api, failedKey, result, g_searchFailure);
 		}
 
 		// Game thread. Does nothing while the recipe tab is not being drawn.
@@ -1139,7 +1160,7 @@ namespace CodexUI
 				if (clicks[row] == TrackClick::None)
 					continue;
 				if (rows[row].kind == GOTO_KIND_MAP)
-					ClickBuildingTrack(*api, clickKeys[row], clicks[row]);
+					ClickBuildingTrack(*api, rows[row], clickKeys[row], clicks[row]);
 				else
 					QueryTrack(*api, clickKeys[row], clicks[row], g_searchFailure);
 			}
