@@ -4,3 +4,4 @@
 - New EscapeCloses option: turn it off to stop Esc closing the Codex window. Esc still closes the search box.
 - New Go button on the recipe tab that shows where the recipe's item is produced; it only shows when the Go to item plugin is installed and on (not released yet)
 - Tick a box in the search menu to track an item or building with Go to item, and untick it to stop (needs the Go to item plugin)
+- Right-clicking an item to pin it now brings tucked pins back out and tells you when it can't pin: the row's tooltip says all pin slots are in use or the item is already pinned

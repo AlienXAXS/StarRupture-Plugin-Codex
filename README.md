@@ -107,8 +107,8 @@ what it produces.
   recipe's inputs and output, the "used in" list) to pin the recipe that makes it. In a pinned
   window, right-click an ingredient to pin its recipe too, so a production chain can be pinned
   step by step. It works wherever pins can be edited: with the Codex, the mod loader overlay (`F2`), the
-  Escape menu or a game screen with the cursor open. An item whose recipe is already pinned is not added twice; items nothing makes
-  (raw resources) do nothing.
+  Escape menu or a game screen with the cursor open. An item whose recipe is already pinned is not added twice, and when all pin slots are in use nothing is
+  added; the row's tooltip says which, and tucked pins come back out. Items nothing makes (raw resources) do nothing.
 - **Pin from the game's menus** -- in the recipe station, the company delivery panel or a
   machine's menu, hover an item until the game shows its tooltip, then right-click
   (`GamePinKey`) to pin the recipe that makes it. The new pin appears with the others. Only
