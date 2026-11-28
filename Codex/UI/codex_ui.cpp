@@ -838,6 +838,7 @@ namespace CodexUI
 		// ImGuiStyleVar_FramePadding, for a checkbox as tall as a line of text.
 		constexpr int kStyleVarAlpha = 0;
 		constexpr int kStyleVarFramePadding = 11;
+		constexpr int kStyleVarCellPadding = 17;
 
 		// The Go button and the search results' checkboxes track an item or a
 		// building in the Go to item plugin, which marks where it is. That
@@ -1376,9 +1377,15 @@ namespace CodexUI
 
 			imgui->SeparatorText("Codex Search");
 
-			// The field takes what the clear button leaves of the row.
+			// The field takes what the clear button leaves of the row. The
+			// theme's cell padding is for data tables: here it would add to the
+			// window's own padding and set the button well off the field.
+			imgui->PushStyleVarVec2(kStyleVarCellPadding, 4.0f, 0.0f);
 			if (!imgui->BeginTable("##Codex_Search_Field", 2, 0))
+			{
+				imgui->PopStyleVar(1);
 				return;
+			}
 			imgui->TableSetupColumn("##field", kColumnFlagsWidthStretch, 1.0f);
 			imgui->TableSetupColumn("##clear", kColumnFlagsWidthFixed, 0.0f);
 			imgui->TableNextColumn();
@@ -1389,7 +1396,7 @@ namespace CodexUI
 				g_justOpenedSearch = false;
 			}
 
-			imgui->SetNextItemWidth(-1.0f);
+			imgui->SetNextItemWidth(-FLT_MIN);
 			if (imgui->InputTextWithHint("##Codex_Search_Input", g_searchHint.c_str(), g_searchBuffer, sizeof(g_searchBuffer)))
 				g_searchHighlight = 0;
 
@@ -1427,6 +1434,7 @@ namespace CodexUI
 			imgui->EndDisabled();
 			imgui->SetItemTooltip("Clear the search");
 			imgui->EndTable();
+			imgui->PopStyleVar(1);
 
 			float mouseX = 0.0f, mouseY = 0.0f;
 			imgui->GetMousePos(&mouseX, &mouseY);
