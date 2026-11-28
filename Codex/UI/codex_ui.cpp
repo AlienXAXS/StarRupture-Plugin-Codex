@@ -3381,11 +3381,14 @@ namespace CodexUI
 			return { maxX - size, minY, maxX, minY + size };
 		}
 
+		enum class TitleGlyph { Close, Collapse, Expand, Minimize };
+
 		// The title buttons' glyphs, from the loader's Material Icons font (see its
 		// MaterialIcons.md for the codepoints).
 		constexpr const char* kIconClose    = "\xEE\x97\x8D"; // U+E5CD close
 		constexpr const char* kIconCollapse = "\xEE\xA4\xB1"; // U+E931 minimize
 		constexpr const char* kIconExpand   = "\xEE\x97\x8F"; // U+E5CF expand_more
+		constexpr const char* kIconMinimize = "\xEE\x85\x9B"; // U+E15B remove, a bar at mid height
 
 		// Draws an icon with its em box centred on (cx, cy). The loader centres the
 		// glyph itself through the icon font's GlyphOffset (1.23.0 and later).
@@ -3397,27 +3400,7 @@ namespace CodexUI
 			imgui->DL_AddText(dl, cx - iconW * 0.5f, cy - size * 0.5f, imgui->GetColorU32FromCol(kColText, 1.0f), icon);
 		}
 
-		// The Codex window's collapse button, on the title bar the loader draws.
-		// A collapsed window stays open: Escape and the Codex key still close it.
-		void RenderDetailTitleBar(IModLoaderImGui* imgui)
-		{
-			if (!CodexFields::RecipeCodex.On() || !g_self || !g_self->hooks->UI)
-				return;
-
-			TrackDetailPanel(imgui);
-
-			const bool collapsed = g_self->hooks->UI->IsPanelCollapsed(g_detailPanel);
-			char label[32];
-			snprintf(label, sizeof(label), "%s###Codex_Collapse", collapsed ? kIconExpand : kIconCollapse);
-			imgui->SameLine(0.0f, -1.0f);
-			if (imgui->SmallButton(label))
-				g_self->hooks->UI->SetPanelCollapsed(g_detailPanel, !collapsed);
-			imgui->SetItemTooltip(collapsed ? "Expand" : "Collapse");
-		}
-
-		enum class TitleGlyph { Close, Collapse, Expand };
-
-		// One button of a pinned window's title bar: an item of its own, like
+		// One button of a window's title bar: an item of its own, like
 		// ImGui's close button, so ImGui hovers it instead of the title bar behind
 		// it (no move cursor, and a press or drag on it never moves the window),
 		// and it takes the same hover and held colors. True when it is clicked.
@@ -3435,11 +3418,38 @@ namespace CodexUI
 				imgui->DL_AddRectFilled(dl, box.minX, box.minY, box.maxX, box.maxY,
 					imgui->GetColorU32FromCol(held ? kColButtonActive : kColButtonHovered, 1.0f), 0.0f, 0);
 			const char* icon = glyph == TitleGlyph::Close ? kIconClose
-				: glyph == TitleGlyph::Collapse ? kIconCollapse : kIconExpand;
+				: glyph == TitleGlyph::Collapse ? kIconCollapse
+				: glyph == TitleGlyph::Minimize ? kIconMinimize : kIconExpand;
 			DrawIconCentred(imgui, dl, icon, (box.minX + box.maxX) * 0.5f, (box.minY + box.maxY) * 0.5f);
 			if (hovered)
 				imgui->SetTooltip(tooltip);
 			return clicked;
+		}
+
+		// The Codex window's collapse button, on the title bar the loader draws.
+		// A collapsed window stays open: Escape and the Codex key still close it.
+		void RenderDetailTitleBar(IModLoaderImGui* imgui)
+		{
+			if (!CodexFields::RecipeCodex.On() || !g_self || !g_self->hooks->UI)
+				return;
+
+			TrackDetailPanel(imgui);
+
+			const bool collapsed = g_self->hooks->UI->IsPanelCollapsed(g_detailPanel);
+			// The loader's last item here is a spacer as large as the title text,
+			// which sets the button's size, and the same line puts it level with it.
+			float titleW = 0.0f, titleH = 0.0f;
+			imgui->GetItemRectSize(&titleW, &titleH);
+			imgui->SameLine(0.0f, -1.0f);
+
+			imgui->SetWindowFontScale(titleH / imgui->GetFontSize());
+			float x = 0.0f, y = 0.0f;
+			imgui->GetCursorScreenPos(&x, &y);
+			const TitleButtonBox box{ x, y, x + titleH, y + titleH };
+			if (RenderTitleButton(imgui, box, "##Codex_Collapse",
+				collapsed ? TitleGlyph::Expand : TitleGlyph::Minimize, collapsed ? "Expand" : "Collapse"))
+				g_self->hooks->UI->SetPanelCollapsed(g_detailPanel, !collapsed);
+			imgui->SetWindowFontScale(1.0f);
 		}
 
 		// The word "all" in the title bar's own text, just left of the buttons:
