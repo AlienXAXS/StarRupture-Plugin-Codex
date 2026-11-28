@@ -8,5 +8,7 @@
 - A new X beside the search field clears what you typed.
 - New EscapeCloses option: turn it off to stop Esc closing the Codex window. Esc still closes the search box.
 - New Go button on the recipe tab that shows where the recipe's item is produced; it only shows when the Go to item plugin is installed and on (not released yet)
-- Tick a box in the search menu to track an item or building with Go to item, and untick it to stop (needs the Go to item plugin)
+- Codex Search now shows one row per item, so an item that two building tiers make is listed once
+- With the Go to item plugin installed (not released yet), items in Codex Search show the same list as Go to item's search: tick a box to track an item and see its distance, and a tracked row shows the nearest location with a Locations button that lists them. Buildings get a box too once Go to item finds them on the in-game map
+- With an older Go to item, you get tracking boxes without distances or locations. Without Go to item, Codex Search has no boxes, distances or locations
 - Right-clicking an item to pin it now brings tucked pins back out and tells you when it can't pin: a row's tooltip says all pin slots are in use or the item is already pinned (from the game's tooltip the reason goes to the log)

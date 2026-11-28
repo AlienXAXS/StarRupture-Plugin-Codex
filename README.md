@@ -143,7 +143,8 @@ what it produces.
   Items a planner does not list open it without an item. To add your own planner, set `Planner`
   to `Custom` and give `CustomUrlTemplate` an address with `{item}`, `{name}` or `{game}`.
 - **Go** -- the recipe tab has a **Go** button that shows where the recipe's item is produced. It needs the Go to item plugin, which is not released yet; the button only shows when that plugin is installed, turned on and can look the item up.
-- **Track from search** -- with Go to item installed, items and buildings in the search menu get a box: tick it to start tracking, untick it to stop. A building only gets a box once Go to item finds it on the in-game map, which can take a second or two. On a dedicated server you may need to open the in-game map once first. Without Go to item the menu looks the same as before.
+- **One row per item in search** -- an item that two building tiers make is listed once.
+- **Track from search** -- with Go to item installed, items in the search menu show the same list as Go to item's own search: tick a box to start tracking an item, untick it to stop, and see how far away it is. A tracked row shows its nearest location and a **Locations** button that opens the list of places. A building only gets a box once Go to item finds it on the in-game map, which can take a second or two. On a dedicated server you may need to open the in-game map once first. With an older Go to item you get the boxes without distances or locations. Without Go to item, search has no boxes, distances or locations.
 
 <img src="images/codex-pinned-cards.png" width="300" alt="Pinned recipe cards at the screen edge, each with Open and Planner buttons">
 <img src="images/codex-launch-planner.png" width="420" alt="The Codex recipe tab for Nanofiber with the Launch planner button">
