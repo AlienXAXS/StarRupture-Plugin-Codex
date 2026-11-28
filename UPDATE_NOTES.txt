@@ -1,6 +1,11 @@
 - Codex now loads on every ModLoader that can run it
 - You can now install and update Codex from the mod loader's Browse list.
 - A new button on the Codex window's title bar collapses the window and opens it again.
+- That button is now a plain icon next to the title, level with it, without a box around it.
+- A recipe that a higher building tier also makes now has Tier tabs on the recipe tab. Pick a tab to see that tier's building, craft time and rates.
+- The search box now has a Codex Search header.
+- You can drag the search box's side edge or corner to make it wider or narrower. It remembers the width, and the Clear button in Saved state on the config page resets it.
+- A new X beside the search field clears what you typed.
 - New EscapeCloses option: turn it off to stop Esc closing the Codex window. Esc still closes the search box.
 - New Go button on the recipe tab that shows where the recipe's item is produced; it only shows when the Go to item plugin is installed and on (not released yet)
 - Tick a box in the search menu to track an item or building with Go to item, and untick it to stop (needs the Go to item plugin)

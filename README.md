@@ -67,6 +67,9 @@ what it produces.
   type an item, recipe or building name, then use `Up`/`Down` to pick a result and `Enter`
   to open it (the top result is highlighted by default, and hovering a row highlights it
   too). Close with `Esc`. The box opens centred; drag it anywhere and it opens there next time.
+  It has a **Codex Search** header<sup>[✦](#msantoro12)</sup> and an X beside the field that
+  clears what you typed. Drag a side edge or the corner grip to make it wider or narrower; its
+  height follows what it shows, and it keeps the width for next time.
 - **Full Codex window** -- press `Shift+N` (configurable) to open the Codex straight to the
   last recipe you viewed, or the building browser if you haven't picked one yet.
 - **Collapse the Codex window** <sup>[✦](#msantoro12)</sup> -- the button on its title bar shrinks it to the title bar and
@@ -78,7 +81,8 @@ what it produces.
 - **Recipe detail window** -- shows a recipe's inputs and outputs side by side, each with
   icon, name, count, and craft rate (items/min). Click an input to jump to the recipe that
   produces it; click an output to see every recipe that consumes it. Click a building under
-  "Made in" to browse everything that building makes.
+  "Made in" to browse everything that building makes. A recipe that a higher building tier
+  also makes has a Tier 1 / Tier 2 tab; the tab picks which tier's recipe the page shows.<sup>[✦](#msantoro12)</sup>
 - **Building browser** -- the Buildings tab lists every crafting building and the recipes it
   can produce. Tiered buildings are grouped under one name (e.g. "Fabricator") with a
   Tier 1 / Tier 2 tab for each tier. Click a recipe to open it, right-click to pin it.
@@ -155,8 +159,8 @@ Settings are written to the plugin's config file on first run and can be edited 
 <img src="images/config-tab.png" width="640" alt="The mod loader's Config tab with Codex selected: dropdowns for the pin settings, the Saved state row and the Planner dropdown">
 
 On the mod loader's config page, `Planner`, `PinLayout`, `PinArrangement` and `PinGrouping` are dropdowns. The search
-box and pin positions have no field: the **Saved state** row at the end of the `Menu`
-section has a **Clear** button that puts the search box back in the centre and the pins back
+box's position and width and the pin positions have no field: the **Saved state** row at the end of the `Menu`
+section has a **Clear** button that puts the search box back in the centre at its default width and the pins back
 on their edge at once, even with the search box open. The saved pins are not touched, so they
 still come back at the next start; only pinning and unpinning change them. The button counts the saved pins like any other saved value, so it can look enabled when only they differ from their defaults; pressing it then changes nothing. Values already in your config file
 keep working, and choices match ignoring case. The dropdowns and the hidden entries are drawn by the mod loader's config page.
@@ -176,6 +180,7 @@ keep working, and choices match ignoring case. The dropdowns and the hidden entr
 | `Menu` | `PinSpacing` | `6` | Space between tiled pins, 1 to 50 screen pixels (a slider with a number box on the config page; not scaled by the font or UI scale). Replaces the old on/off `PinGap`, which is no longer read |
 | `Menu` | `PinCentering` | `true` | Keep the pinned recipes centered along their edge: left to right on Top, top to bottom on Left and Right. On: the group re-centers when a pin is added or removed, and dragging any pin moves the group only toward or away from the edge. Off: drag it anywhere. Ungrouped, it only places a pin or the whole set when you pin, change the layout, or press Arrange pins; it never moves a pin you placed by hand |
 | `Menu` | `SearchBoxX` | `-1` | Search box horizontal centre as a fraction of the screen width (`-1` = centred). Set by dragging the box. No field on the config page; Clear resets it |
+| `Menu` | `SearchBoxWidth` | `-1` | Search box width before text scaling (`-1` = default). Set by resizing the box. No field on the config page; Clear resets it |
 | `Menu` | `SearchBoxY` | `-1` | Search box top edge as a fraction of the screen height (`-1` = centred). Set by dragging the box. No field on the config page; Clear resets it |
 | `Planner` | `Planner` | `StarRupture Planner` | Planner the Planner button opens: `StarRupture Planner`, `starruptureplanner.com`, `starrupturecalc.com`, `starrupture-planner.com` or `Custom` (dropdown) |
 | `Planner` | `CustomUrlTemplate` | (empty) | Address used when `Planner` is `Custom`. `{item}` becomes the StarRupture Planner's item id, `{name}` the item's display name and `{game}` the game's internal item name, all URL-encoded, e.g. `https://example.com/plan?item={item}` |
