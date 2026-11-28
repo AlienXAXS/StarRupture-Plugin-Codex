@@ -1395,6 +1395,25 @@ int main()
 		}
 	}
 
+	printf("search rows\n");
+	{
+		struct Entry
+		{
+			std::string key;
+			int tier;
+			char id;
+		};
+		const std::vector<Entry> entries = {
+			{ "Wire", 2, 'a' }, { "Plate", 1, 'b' }, { "", 1, 'c' }, { "Wire", 1, 'd' },
+			{ "", 1, 'e' }, { "Wire", 1, 'f' }, { "Plate", 3, 'g' },
+		};
+		std::string ids;
+		for (const Entry& entry : CodexSearchRows::OnePerKey(entries,
+			[](const Entry& e) -> const std::string& { return e.key; }, [](const Entry& e) { return e.tier; }))
+			ids += entry.id;
+		Check(ids == "dbce", "one row per key, the lowest tier's, empty keys kept apart", ids);
+	}
+
 	printf("\n%d checks, %d failed\n", g_checks, g_failed);
 	return g_failed == 0 ? 0 : 1;
 }

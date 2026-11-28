@@ -14,6 +14,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
+#include <vector>
 
 namespace CodexPinLayout
 {
@@ -621,5 +622,35 @@ namespace CodexRowSize
 	inline float TwoLineTextHeight(float lineHeight, float lineHeightWithSpacing)
 	{
 		return lineHeightWithSpacing + lineHeight - kSubLinePullUp;
+	}
+}
+
+// The search results list an item once, whatever the number of recipes that
+// make it.
+namespace CodexSearchRows
+{
+	// One entry for each key, in the order the keys first appear: of the entries
+	// that share a key, the first with the lowest rank. An empty key is never
+	// shared.
+	template <class T, class KeyOf, class RankOf>
+	std::vector<T> OnePerKey(const std::vector<T>& entries, KeyOf keyOf, RankOf rankOf)
+	{
+		std::vector<T> out;
+		for (const T& entry : entries)
+		{
+			bool shared = false;
+			for (T& kept : out)
+			{
+				if (keyOf(entry).empty() || keyOf(kept) != keyOf(entry))
+					continue;
+				if (rankOf(entry) < rankOf(kept))
+					kept = entry;
+				shared = true;
+				break;
+			}
+			if (!shared)
+				out.push_back(entry);
+		}
+		return out;
 	}
 }
