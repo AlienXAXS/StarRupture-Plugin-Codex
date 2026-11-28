@@ -1643,6 +1643,62 @@ namespace CodexUI
 			}
 		}
 
+		// A tab per tier of a recipe that a later building tier remakes, such as
+		// Fabricator Tier 1 and Tier 2. Picking a tab selects that tier's
+		// recipe, and `info` follows, so the rest of the page shows it.
+		void RenderRecipeTierTabs(IModLoaderImGui* imgui, CodexRecipes::RecipeInfo& info)
+		{
+			// The tiers of the recipe on show, lowest first, and the recipe the
+			// tabs last agreed on: any other selection came from elsewhere.
+			static std::vector<std::pair<int, void*>> tiers;
+			static void* shown = nullptr;
+
+			const auto isSelected = [](const std::pair<int, void*>& tier) { return tier.second == g_selectedNativeRecipe; };
+			if (std::none_of(tiers.begin(), tiers.end(), isSelected))
+			{
+				tiers.clear();
+				for (const CodexRecipes::RecipeInfo& other : CodexRecipes::GetAll())
+				{
+					if (other.displayName == info.displayName)
+						tiers.emplace_back(other.minTier, other.nativeRecipe);
+				}
+				std::stable_sort(tiers.begin(), tiers.end(),
+					[](const auto& a, const auto& b) { return a.first < b.first; });
+			}
+
+			const bool select = shown != g_selectedNativeRecipe;
+			void* picked = nullptr;
+			imgui->PushIDStr(info.displayName.c_str());
+			if (imgui->BeginTabBar("##recipe_tiers", 0))
+			{
+				for (const auto& tier : tiers)
+				{
+					char label[32];
+					snprintf(label, sizeof(label), "Tier %d", tier.first);
+					const int flags = select && tier.second == g_selectedNativeRecipe ? kTabItemFlagsSetSelected : 0;
+					PushIDPtr(imgui, tier.second);
+					if (imgui->BeginTabItem(label, nullptr, flags))
+					{
+						picked = tier.second;
+						imgui->EndTabItem();
+					}
+					imgui->PopID();
+				}
+				imgui->EndTabBar();
+			}
+			imgui->PopID();
+
+			// A selection asked for this frame shows on the next one, so the tab
+			// reported now is still the old one.
+			CodexRecipes::RecipeInfo other;
+			if (!select && picked && picked != g_selectedNativeRecipe && CodexRecipes::FindByNativeRecipe(picked, other))
+			{
+				g_selectedNativeRecipe = picked;
+				info = std::move(other);
+			}
+			shown = g_selectedNativeRecipe;
+		}
+
 		void RenderRecipeTab(IModLoaderImGui* imgui)
 		{
 			CodexRecipes::RecipeInfo info;
@@ -1669,6 +1725,9 @@ namespace CodexUI
 
 			imgui->SameLine(0.0f, 12.0f);
 			imgui->SeparatorText(info.displayName.c_str());
+
+			if (info.hasTierVariants)
+				RenderRecipeTierTabs(imgui, info);
 
 			// "Made in: Fabricator (Tier 1), Fabricator (Tier 2)" - each
 			// building is a link into the building browser.
