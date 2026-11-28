@@ -104,6 +104,13 @@ namespace CodexConfig
 		},
 		{
 			"Menu",
+			"SearchBoxWidth",
+			ConfigValueType::Hidden,
+			"-1",
+			"Width of the search box before text scaling; -1 uses the default. Set by resizing the box"
+		},
+		{
+			"Menu",
 			"SearchBoxY",
 			ConfigValueType::Hidden,
 			"-1",
@@ -315,6 +322,17 @@ namespace CodexConfig
 		{
 			x = s_self ? s_self->config->ReadFloat(s_self, "Menu", "SearchBoxX", -1.0f) : -1.0f;
 			y = s_self ? s_self->config->ReadFloat(s_self, "Menu", "SearchBoxY", -1.0f) : -1.0f;
+		}
+
+		static float GetSearchBoxWidth()
+		{
+			return s_self ? s_self->config->ReadFloat(s_self, "Menu", "SearchBoxWidth", -1.0f) : -1.0f;
+		}
+
+		static void SetSearchBoxWidth(float width)
+		{
+			if (s_self)
+				s_self->config->WriteFloat(s_self, "Menu", "SearchBoxWidth", width);
 		}
 
 		static void SetSearchBoxPos(float x, float y)

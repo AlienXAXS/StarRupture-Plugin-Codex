@@ -110,6 +110,10 @@ namespace CodexUI
 		float g_searchPosX = 0.0f;
 		float g_searchPosY = 0.0f;
 		float g_searchSavedX = -1.0f;
+		// The width the player dragged the box to, at the 13px baseline font;
+		// 0 or less until they have.
+		float g_searchSavedWidth = -1.0f;
+		bool  g_searchResized = false; // a resize not yet saved
 		float g_searchSavedY = -1.0f;
 
 		// Last display size a Codex window rendered on - places the search
@@ -145,6 +149,7 @@ namespace CodexUI
 		constexpr int kItemSelectableFlags = (1 << 4);
 
 		constexpr int kColumnFlagsWidthStretch = 1 << 3;
+		constexpr int kColumnFlagsWidthFixed = 1 << 4;
 		constexpr int kTabItemFlagsSetSelected = 1 << 1;
 		constexpr int kMouseCursorResizeAll = 2;
 
@@ -270,6 +275,7 @@ namespace CodexUI
 			g_searchHighlight = 0;
 			g_searchPlaceFrames = 1;
 			g_searchPlaced = false;
+			g_searchHints.height = 0.0f; // fit the empty box before resizing it
 			PlaceSearchBox(1.0f);
 			g_searchHint = std::string("Search recipes and buildings (") +
 				CodexConfig::Config::GetCodexKey() + " opens full Codex)";
@@ -781,6 +787,7 @@ namespace CodexUI
 		// ImGui's default 13px font.
 		constexpr float kBaselineFontSize = 13.0f;
 		constexpr float kSearchBoxBaseWidth = 440.0f;
+		constexpr float kSearchBoxMinWidth = 300.0f;
 
 		// Puts the search box where the player last dropped it, or centred
 		// (as if it were collapsed) when it has never been moved. The
@@ -1320,14 +1327,8 @@ namespace CodexUI
 			imgui->SameLine(0.0f, -1.0f);
 		}
 
-		void RenderSearchWidget(IModLoaderImGui* imgui)
+		void RenderSearchContents(IModLoaderImGui* imgui, float fontScale)
 		{
-			if (!CodexFields::RecipeCodex.On())
-				return;
-
-			const float fontScale = (std::max)(1.0f, imgui->GetFontSize() / kBaselineFontSize);
-			g_searchHints.width = kSearchBoxBaseWidth * fontScale;
-
 			imgui->GetDisplaySize(&g_displayW, &g_displayH);
 
 			if (g_searchPlaceFrames > 0)
@@ -1351,22 +1352,36 @@ namespace CodexUI
 					g_searchPosY = posY;
 					g_searchPlaced = true;
 				}
-				else if (imgui->IsMouseReleased(0) &&
-					(std::fabs(posX - g_searchPosX) > 0.5f || std::fabs(posY - g_searchPosY) > 0.5f))
+				else if (imgui->IsMouseReleased(0) && (g_searchResized ||
+					std::fabs(posX - g_searchPosX) > 0.5f || std::fabs(posY - g_searchPosY) > 0.5f))
 				{
+					if (g_searchResized)
+					{
+						g_searchResized = false;
+						CodexConfig::Config::SetSearchBoxWidth(g_searchSavedWidth);
+					}
 					g_searchPosX = posX;
 					g_searchPosY = posY;
 					g_searchSavedX = (posX + sizeX * 0.5f) / g_displayW;
 					g_searchSavedY = posY / g_displayH;
 					CodexConfig::Config::SetSearchBoxPos(g_searchSavedX, g_searchSavedY);
 
-					// Dragging the box takes focus off the field; give it back so
+					// Dragging or resizing the box takes focus off the field; give it back so
 					// typing and Enter keep working.
 					g_justOpenedSearch = true;
 				}
 			}
 
 			ShowDragCursor(imgui);
+
+			imgui->SeparatorText("Codex Search");
+
+			// The field takes what the clear button leaves of the row.
+			if (!imgui->BeginTable("##Codex_Search_Field", 2, 0))
+				return;
+			imgui->TableSetupColumn("##field", kColumnFlagsWidthStretch, 1.0f);
+			imgui->TableSetupColumn("##clear", kColumnFlagsWidthFixed, 0.0f);
+			imgui->TableNextColumn();
 
 			if (g_justOpenedSearch)
 			{
@@ -1400,6 +1415,18 @@ namespace CodexUI
 				(imgui->IsItemDeactivated() && imgui->IsKeyPressed(VK_RETURN, false));
 			const bool mousePressed = imgui->IsMouseClicked(0, false) || imgui->IsMouseClicked(1, false);
 			const bool submitted = deactivated && !mousePressed;
+
+			imgui->TableNextColumn();
+			imgui->BeginDisabled(g_searchBuffer[0] == '\0');
+			if (imgui->Button("X##Codex_Search_Clear"))
+			{
+				g_searchBuffer[0] = '\0';
+				g_searchHighlight = 0;
+				g_justOpenedSearch = true; // back to the field on the next frame
+			}
+			imgui->EndDisabled();
+			imgui->SetItemTooltip("Clear the search");
+			imgui->EndTable();
 
 			float mouseX = 0.0f, mouseY = 0.0f;
 			imgui->GetMousePos(&mouseX, &mouseY);
@@ -1531,6 +1558,34 @@ namespace CodexUI
 					OpenBuilding(target, 0);
 				}
 			}
+		}
+
+		// The box's width is the player's to drag; its height follows what it
+		// shows. ImGui refuses a resize while a window is auto-fitting, so after
+		// the opening frame the height asked for is the measured one.
+		void RenderSearchWidget(IModLoaderImGui* imgui)
+		{
+			if (!CodexFields::RecipeCodex.On())
+				return;
+
+			const float fontScale = (std::max)(1.0f, imgui->GetFontSize() / kBaselineFontSize);
+			float windowW = 0.0f, windowH = 0.0f;
+			imgui->GetWindowSize(&windowW, &windowH);
+			if (imgui->IsMouseDown(0) && g_searchHints.height > 0.0f &&
+				std::fabs(windowW - g_searchHints.width) > 0.5f)
+			{
+				g_searchSavedWidth = (std::max)(kSearchBoxMinWidth, windowW / fontScale);
+				g_searchResized = true;
+			}
+			g_searchHints.width = (g_searchSavedWidth > 0.0f
+				? (std::max)(kSearchBoxMinWidth, g_searchSavedWidth)
+				: kSearchBoxBaseWidth) * fontScale;
+
+			// The first cursor position is the window's top padding.
+			const float topPad = imgui->GetCursorPosY();
+			RenderSearchContents(imgui, fontScale);
+			const float itemGap = imgui->GetFrameHeightWithSpacing() - imgui->GetFrameHeight();
+			g_searchHints.height = imgui->GetCursorPosY() - itemGap + topPad;
 		}
 
 		// The Planner button, shared by the recipe tab and the pinned
@@ -2252,6 +2307,12 @@ namespace CodexUI
 			{
 				g_escapeCloses.store(_stricmp(newValue, "true") == 0 || strcmp(newValue, "1") == 0,
 					std::memory_order_relaxed);
+				return;
+			}
+
+			if (strcmp(key, "SearchBoxWidth") == 0)
+			{
+				g_searchSavedWidth = static_cast<float>(atof(newValue));
 				return;
 			}
 
@@ -4042,7 +4103,7 @@ namespace CodexUI
 		g_searchHints.pivot_y = 0.0f; // Top-anchored so growth expands downward, not from center
 		g_searchHints.size_cond = 0; // Always
 		g_searchHints.pos_cond  = 0; // Always - for the frames it is placed on
-		g_searchHints.extra_window_flags = PluginWindowFlags_NoTitleBar | PluginWindowFlags_NoResize |
+		g_searchHints.extra_window_flags = PluginWindowFlags_NoTitleBar | PluginWindowFlags_NoScrollbar |
 			PluginWindowFlags_NoSavedSettings | PluginWindowFlags_PauseMenuMouseInputs;
 
 		g_searchDesc.name        = "Codex Search";
@@ -4086,6 +4147,7 @@ namespace CodexUI
 			self->hooks->UI->SetWidgetVisible(g_closerWidget, false);
 
 		CodexConfig::Config::GetSearchBoxPos(g_searchSavedX, g_searchSavedY);
+		g_searchSavedWidth = CodexConfig::Config::GetSearchBoxWidth();
 		g_escapeCloses.store(CodexConfig::Config::GetEscapeCloses(), std::memory_order_relaxed);
 		LoadPinSettings();
 		RegisterPinSlots(self);
